@@ -1,0 +1,47 @@
+{
+  "expo": {
+    "name": "agent-app",
+    "slug": "agent-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.meenzy.agentapp",
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "@rnmapbox/maps",
+      "expo-secure-store",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow Meenzy to use your location for background tracking."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Meenzy to access your camera for delivery proof."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "63a49cab-0a3a-43c3-ab14-24c393be1492"
+      }
+    },
+    "owner": "vasanth0223s-team"
+  }
+}

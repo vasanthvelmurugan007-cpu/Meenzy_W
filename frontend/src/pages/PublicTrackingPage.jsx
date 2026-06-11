@@ -1,0 +1,147 @@
+import React, { useState, useEffect } from 'react';
+import { useParams, useSearchParams } from 'react-router-dom';
+import Map, { Marker, NavigationControl } from 'react-map-gl';
+import 'mapbox-gl/dist/mapbox-gl.css';
+import { Package, Navigation, Phone, CheckCircle, Clock } from 'lucide-react';
+
+const FONT = "'Inter', sans-serif";
+
+export default function PublicTrackingPage() {
+  const { orderId } = useParams();
+  const [searchParams] = useSearchParams();
+  const phoneVerification = searchParams.get('phone');
+
+  const [orderData, setOrderData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    fetchTrackingData();
+    // Poll every 10 seconds to get updated agent location
+    const interval = setInterval(() => {
+      fetchTrackingData(true);
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [orderId, phoneVerification]);
+
+  async function fetchTrackingData(silent = false) {
+    try {
+      if (!silent) setLoading(true);
+      const res = await fetch(`/api/tracking/${orderId}?phone=${phoneVerification}`);
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+      const data = await res.json();
+      setOrderData(data.order);
+      if (!silent) setError(null);
+    } catch (err) {
+      if (!silent) setError('Failed to load tracking data. Please ensure you clicked the exact link from your SMS/WhatsApp.');
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  }
+
+  if (loading) return <div style={{ padding: 40, textAlign: 'center', fontFamily: FONT }}>Loading your live delivery status...</div>;
+  if (error) return <div style={{ padding: 40, textAlign: 'center', fontFamily: FONT, color: 'red' }}>{error}</div>;
+  if (!orderData) return null;
+
+  const isDelivered = orderData.status === 'DELIVERED';
+  const hasAgentLocation = orderData.agent && orderData.agent.lat && orderData.agent.lng;
+
+  return (
+    <div style={{ fontFamily: FONT, background: '#f9fafb', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+      {/* Header */}
+      <div style={{ background: '#fff', padding: '16px 20px', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <h1 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#1f2937' }}>Meenzy Fresh Catch</h1>
+        <div style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', display: 'flex', alignItems: 'center', gap: 4 }}>
+          <Package size={14} /> Order #{orderData.id.slice(-6)}
+        </div>
+      </div>
+
+      {/* Map Section */}
+      <div style={{ flex: 1, position: 'relative', background: '#e5e7eb', minHeight: 300 }}>
+        {hasAgentLocation ? (
+          <Map
+            initialViewState={{
+              longitude: parseFloat(orderData.agent.lng),
+              latitude: parseFloat(orderData.agent.lat),
+              zoom: 14
+            }}
+            mapStyle={`mapbox://styles/mapbox/streets-v12`}
+            mapboxAccessToken={import.meta.env.VITE_MAPBOX_TOKEN}
+          >
+            <NavigationControl position="top-right" />
+            
+            {/* Agent Marker */}
+            <Marker longitude={parseFloat(orderData.agent.lng)} latitude={parseFloat(orderData.agent.lat)} anchor="bottom">
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <div style={{ background: '#10b981', color: '#fff', width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.3)', border: '2px solid #fff' }}>
+                  <Navigation size={16} style={{ transform: 'rotate(45deg)' }} />
+                </div>
+              </div>
+            </Marker>
+          </Map>
+        ) : (
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', color: '#6b7280', padding: 20, textAlign: 'center' }}>
+            <Map size={48} style={{ opacity: 0.2, marginBottom: 16 }} />
+            <p style={{ margin: 0, fontWeight: 600 }}>Live Map Unavailable</p>
+            <p style={{ margin: '8px 0 0 0', fontSize: 14 }}>We will show the live map once the driver is dispatched.</p>
+          </div>
+        )}
+      </div>
+
+      {/* Order Info Card (Bottom Sheet style on mobile) */}
+      <div style={{ background: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, marginTop: -20, position: 'relative', zIndex: 10, boxShadow: '0 -4px 10px rgba(0,0,0,0.05)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+          <div style={{ width: 48, height: 48, borderRadius: '50%', background: isDelivered ? '#ecfdf5' : '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: isDelivered ? '#10b981' : '#3b82f6' }}>
+            {isDelivered ? <CheckCircle size={24} /> : <Clock size={24} />}
+          </div>
+          <div>
+            <h2 style={{ margin: '0 0 4px 0', fontSize: 18, fontWeight: 800, color: '#1f2937' }}>
+              {isDelivered ? 'Order Delivered!' : 'Arriving Soon'}
+            </h2>
+            <p style={{ margin: 0, fontSize: 13, color: '#6b7280' }}>
+              {isDelivered ? 'Enjoy your fresh catch!' : orderData.status.replace(/_/g, ' ')}
+            </p>
+          </div>
+        </div>
+
+        {orderData.agent && !isDelivered && (
+          <div style={{ background: '#f9fafb', borderRadius: 12, padding: 16, marginBottom: 20, border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', gap: 16 }}>
+            <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#d1d5db', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#4b5563', fontSize: 16 }}>
+              {orderData.agent.name.charAt(0)}
+            </div>
+            <div style={{ flex: 1 }}>
+              <p style={{ margin: '0 0 2px 0', fontWeight: 700, fontSize: 15, color: '#1f2937' }}>{orderData.agent.name}</p>
+              <p style={{ margin: 0, fontSize: 12, color: '#6b7280' }}>{orderData.agent.vehicle || 'Delivery Partner'}</p>
+            </div>
+          </div>
+        )}
+
+        <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: 20 }}>
+          <h3 style={{ margin: '0 0 12px 0', fontSize: 14, fontWeight: 700, color: '#374151', textTransform: 'uppercase' }}>Delivery Details</h3>
+          <p style={{ margin: '0 0 8px 0', fontSize: 14, color: '#4b5563', display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+            <span style={{ fontWeight: 600, color: '#1f2937', minWidth: 60 }}>Address:</span> {orderData.address}
+          </p>
+          <p style={{ margin: '0 0 16px 0', fontSize: 14, color: '#4b5563', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontWeight: 600, color: '#1f2937', minWidth: 60 }}>Phone:</span> {orderData.phone}
+          </p>
+
+          <div style={{ background: '#f3f4f6', borderRadius: 8, padding: 12 }}>
+            <h3 style={{ margin: '0 0 8px 0', fontSize: 12, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>Items</h3>
+            {orderData.items.map((item, idx) => (
+              <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#374151', marginBottom: 4 }}>
+                <span>{item.quantity}x {item.product_name}</span>
+                <span style={{ fontWeight: 600 }}>₹{item.price}</span>
+              </div>
+            ))}
+            <div style={{ borderTop: '1px dashed #d1d5db', marginTop: 8, paddingTop: 8, display: 'flex', justifyContent: 'space-between', fontWeight: 800, fontSize: 15, color: '#1f2937' }}>
+              <span>Total to Pay</span>
+              <span>₹{orderData.total_price}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
