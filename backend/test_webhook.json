@@ -1,0 +1,36 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "123",
+      "changes": [
+        {
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": {
+              "display_phone_number": "919845444003",
+              "phone_number_id": "12345"
+            },
+            "contacts": [{"profile": {"name": "Test User"}, "wa_id": "919845444003"}],
+            "messages": [
+              {
+                "from": "919845444003",
+                "id": "wamid.test_msg_123_45",
+                "timestamp": "1710000000",
+                "type": "interactive",
+                "interactive": {
+                  "type": "button_reply",
+                  "button_reply": {
+                    "id": "category_high_protein",
+                    "title": "⚡ High Protein"
+                  }
+                }
+              }
+            ]
+          },
+          "field": "messages"
+        }
+      ]
+    }
+  ]
+}

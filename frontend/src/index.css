@@ -1,0 +1,92 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: 'DM Sans', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: var(--c-pageBg);
+  color: var(--c-text);
+}
+
+input, button, textarea, select {
+  font-family: inherit;
+}
+
+/* ─── Color palette (light only) ────────────────────────────────────────
+   Tokens consumed via the `C` object in constants.js (each maps to var(--c-*)).
+   This app is light-mode only — there is no dark theme. */
+:root {
+  --c-pageBg: #F4F6F8;
+  --c-sidebarBg: #FFFFFF;
+  --c-sidebarBorder: #E2E8F0;
+  --c-headerBg: #ffffff;
+  --c-headerText: #0F172A;
+  --c-headerMuted: #64748B;
+  --c-headerBorder: #E2E8F0;
+  --c-headerSurface: #F1F5F9;
+  --c-cardBg: #ffffff;
+  --c-border: #E2E8F0;
+  --c-borderDark: #CBD5E1;
+  --c-text: #1E293B;
+  --c-textSecondary: #64748B;
+  --c-textMuted: #94A3B8;
+  --c-primary: #FF4757;
+  --c-primaryHover: #FF6B81;
+  --c-primaryLight: #FFEAEB;
+  --c-primaryText: #FFFFFF;
+  --c-purple: #8B5CF6;
+  --c-green: #10B981;
+  --c-amber: #F59E0B;
+  --c-aqua: #0EB6CE;
+  --c-shadowSm: 0 1px 3px rgba(0,0,0,.04);
+  --c-shadowMd: 0 4px 12px rgba(0,0,0,.06);
+  --c-shadowLg: 0 12px 30px rgba(0,0,0,.08);
+  --c-waBg: #e5ddd5;
+  /* chat */
+  --c-incomingBg: #ffffff;
+  --c-incomingText: #111b21;
+  --c-outgoingBg: #d9fdd3;
+  --c-outgoingText: #111b21;
+  --c-chatBg: #e5ddd5;
+  --c-statusDelivered: #53bdeb;
+  --c-statusRead: #53bdeb;
+  --c-statusSent: #8696a0;
+  /* neutral aliases for literal-heavy views */
+  --c-surface: #ffffff;
+  --c-surfaceAlt: #F8FAFC;
+  --c-hover: #EFEEE6;
+  --c-chatPanel: #f0f2f5;
+  --c-chatWall: #efeae2;
+}
+
+@keyframes springPop {
+  0% { transform: scale(0.95); opacity: 0; }
+  50% { transform: scale(1.02); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.spring-pop {
+  animation: springPop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+.hover-lift {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.hover-lift:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--c-shadowLg);
+}
+
+input, textarea, select { color: var(--c-text); }
+::placeholder { color: var(--c-textMuted); opacity: 1; }
