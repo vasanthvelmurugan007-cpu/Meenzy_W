@@ -83,6 +83,7 @@ async function triageWithLLM(messageText, preferences = null) {
 - PLACING_ORDER (User wants to buy something)
 - ORDER_COMPLAINT (User is unhappy, missing items, bad quality)
 - DELIVERY_QUERY (User is asking when it arrives)
+- RECIPE_QUERY (User is asking how to cook, recipes, marinades for seafood)
 - HUMAN_HANDOFF (User explicitly asks to speak to a human, agent, or person)
 - GENERAL_FAQ (Business hours, location, cleaning process)
 Message: "${messageText}"
@@ -1261,6 +1262,20 @@ router.post('/webhook/whatsapp', async (req, res) => {
                      await enqueueSend({ kind: 'text', accountId: account.id, to: String(r.contact_number).replace(/\D/g, ''), localMessageId: localId, payload: { body: text, previewUrl: false } });
                    }
                    console.log(`[llm-triage] Sent dynamic FAQ response for ${r.contact_number}`);
+                   r.__handled = true;
+                 }
+               } else if (intent === 'RECIPE_QUERY') {
+                 const { generateRecipeLLM } = require('../engine/aiRecipeAssistant');
+                 const text = await generateRecipeLLM(r.contact_number, trimmedBody);
+                 if (text) {
+                   const { resolveAccount, insertPendingRow } = require('../services/messageSender');
+                   const { enqueueSend } = require('../queue/sendQueue');
+                   const { account, error } = await resolveAccount({});
+                   if (!error && account) {
+                     const localId = await insertPendingRow({ account, toNumber: r.contact_number, messageType: 'text', messageBody: text });
+                     await enqueueSend({ kind: 'text', accountId: account.id, to: String(r.contact_number).replace(/\D/g, ''), localMessageId: localId, payload: { body: text, previewUrl: false } });
+                   }
+                   console.log(`[llm-triage] Sent Recipe response for ${r.contact_number}`);
                    r.__handled = true;
                  }
                }
