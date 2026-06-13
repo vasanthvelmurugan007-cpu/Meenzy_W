@@ -125,14 +125,16 @@ router.post('/:agentId/orders/:orderId/claim', verifyAgent, async (req, res) => 
 
     assertOrderTransition(order.status, 'DISPATCHED_TO_3PL');
 
-    // Generate delivery OTP
-    const otp = Math.floor(1000 + Math.random() * 9000).toString(); // 4 digit OTP
+    // Generate delivery OTP fallback
+    const fallbackOtp = Math.floor(1000 + Math.random() * 9000).toString(); // 4 digit OTP
 
-    await client.query(`
+    const { rows: updateRows } = await client.query(`
       UPDATE coexistence.ecosystem_orders 
-      SET assigned_agent_id = $1, status = 'DISPATCHED_TO_3PL', delivery_otp = $2, updated_at = NOW()
-      WHERE id = $3
-    `, [agentId, otp, orderId]);
+      SET assigned_agent_id = $1, status = 'DISPATCHED_TO_3PL', delivery_otp = COALESCE(delivery_otp, $2), updated_at = NOW()
+      WHERE id = $3 RETURNING delivery_otp
+    `, [agentId, fallbackOtp, orderId]);
+
+    const finalOtp = updateRows[0].delivery_otp;
 
     await client.query(`
       INSERT INTO coexistence.ecosystem_order_history (order_id, from_status, to_status, reason)
@@ -147,7 +149,7 @@ router.post('/:agentId/orders/:orderId/claim', verifyAgent, async (req, res) => 
       const toPhone = String(order.user_phone).replace(/\D/g, '');
       const trackingPhone = toPhone.slice(-4);
       const trackingLink = `${process.env.CORS_ORIGIN}/#/track/${orderId}?phone=${trackingPhone}`;
-      const msg = `🛵 Your order is out for delivery!\n\nAgent is on the way. Provide this OTP to receive your package: *${otp}*\n\nTrack order: ${trackingLink}`;
+      const msg = `🛵 Your order is out for delivery!\n\nAgent is on the way. Provide this OTP to receive your package: *${finalOtp}*\n\nTrack order: ${trackingLink}`;
       await enqueueSend(account.id, toPhone, 'text', { text: msg }, `dispatch_${orderId}`);
     }
 

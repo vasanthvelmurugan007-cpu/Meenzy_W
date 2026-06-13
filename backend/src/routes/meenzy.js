@@ -189,6 +189,9 @@ async function processCheckout(customerPhone, cartItems, catalogId) {
  */
 async function confirmOrder(orderId, trackingNumber = null) {
   try {
+    // 0. Ensure OTP column exists
+    await pool.query(`ALTER TABLE coexistence.meenzy_preorders ADD COLUMN IF NOT EXISTS otp VARCHAR(10)`).catch(() => {});
+
     // 1. Fetch preorder details
     const orderRes = await pool.query(
       `SELECT customer_phone, ordered_item, quantity FROM coexistence.meenzy_preorders WHERE id = $1`,
@@ -199,10 +202,11 @@ async function confirmOrder(orderId, trackingNumber = null) {
     }
     const order = orderRes.rows[0];
     
-    // 2. Update status to 'confirmed'
+    // 2. Generate OTP and Update status to 'confirmed'
+    const otp = Math.floor(1000 + Math.random() * 9000).toString(); // 4-digit OTP
     await pool.query(
-      `UPDATE coexistence.meenzy_preorders SET order_status = 'confirmed' WHERE id = $1`,
-      [orderId]
+      `UPDATE coexistence.meenzy_preorders SET order_status = 'confirmed', otp = $2 WHERE id = $1`,
+      [orderId, otp]
     );
     
     // 3. Fetch live Wix products to calculate the correct price
@@ -278,8 +282,14 @@ async function confirmOrder(orderId, trackingNumber = null) {
         'sent'
       ]
     );
+
+    // 5. Send Follow-up Text Message with OTP and Tracking Link
+    const trackingPhone = String(order.customer_phone).replace(/\D/g, '').slice(-4);
+    const trackingLink = `${process.env.CORS_ORIGIN || 'https://www.meenzy.in'}/#/track/${orderId}?phone=${trackingPhone}`;
+    const otpMsg = `🔒 *Your Delivery OTP:* ${otp}\n\n📍 *Track your order live here:*\n${trackingLink}\n\nPlease share this OTP with the delivery agent when they arrive!`;
+    await sendMetaTextMessage(order.customer_phone, otpMsg);
     
-    return { ok: true, wamid, receiptSummary, trackingId };
+    return { ok: true, wamid, receiptSummary, trackingId, otp };
   } catch (err) {
     console.error(`[meenzy-confirm] Error confirming order ${orderId}:`, err.message);
     throw err;
@@ -498,9 +508,13 @@ router.post('/meenzy/inventory-confirm', async (req, res) => {
         const o = orderRes.rows[0];
         const displayOrderId = o.wix_order_id || o.id;
         const trackingPhone = String(customer_phone).replace(/\D/g, '').slice(-4);
-        const trackingLink = `${process.env.CORS_ORIGIN}/#/track/${o.id}?phone=${trackingPhone}`;
+        const trackingLink = `${process.env.CORS_ORIGIN || 'https://www.meenzy.in'}/#/track/${o.id}?phone=${trackingPhone}`;
         
-        messageText = `🎉 *Order Confirmed!* (Order #${displayOrderId})\n\nGreat news! Your preorder for *${ordered_item}* is secured from today's fresh catch! 🌊\n\n💵 *Total Paid:* ₹${o.total_price}\n\n📍 *Track your delivery live:*\n${trackingLink}\n\nWe are packing it now and will notify you when it's out for delivery! 🐟🍽️`;
+        // Generate OTP and save to ecosystem_orders
+        const otp = Math.floor(1000 + Math.random() * 9000).toString();
+        await pool.query(`UPDATE coexistence.ecosystem_orders SET delivery_otp = $1 WHERE id = $2`, [otp, o.id]);
+        
+        messageText = `🎉 *Order Confirmed!* (Order #${displayOrderId})\n\nGreat news! Your preorder for *${ordered_item}* is secured from today's fresh catch! 🌊\n\n💵 *Total Paid:* ₹${o.total_price}\n\n📍 *Track your delivery live:*\n${trackingLink}\n\n🔒 *Delivery OTP:* ${otp}\n(Share this with the delivery agent to receive your order)\n\nWe are packing it now and will notify you when it's out for delivery! 🐟🍽️`;
       }
 
       // Create optimistic chat_history row

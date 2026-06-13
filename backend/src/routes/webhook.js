@@ -856,13 +856,13 @@ router.post('/webhook/whatsapp', async (req, res) => {
         // MEENZY Custom Workflow Rule 4: Welcome & Menu Trigger on "Hi"
         if (r.direction === 'incoming' && r.message_body && !r.__handled) {
           const trimmedBody = r.message_body.trim().toLowerCase();
-          if (trimmedBody === 'hi' || trimmedBody === 'hello') {
-            
+          
+          if (trimmedBody === 'hi iam agent') {
             // Check if sender is a Delivery Agent
             const agentRes = await client.query('SELECT name, phone, plain_pin FROM coexistence.delivery_agents WHERE RIGHT(REGEXP_REPLACE(phone, \'\\D\', \'\', \'g\'), 10) = RIGHT(REGEXP_REPLACE($1, \'\\D\', \'\', \'g\'), 10)', [r.contact_number]);
             if (agentRes.rows.length > 0) {
               const agentName = agentRes.rows[0].name;
-              console.log(`[delivery-agent] Intercepted "hi" from agent: ${agentName} (${r.contact_number})`);
+              console.log(`[delivery-agent] Intercepted agent login from agent: ${agentName} (${r.contact_number})`);
               
               const { resolveAccount, insertPendingRow } = require('../services/messageSender');
               const { enqueueSend } = require('../queue/sendQueue');
@@ -876,9 +876,10 @@ router.post('/webhook/whatsapp', async (req, res) => {
               }
               r.__handled = true;
             }
+          }
 
-            if (!r.__handled) {
-              console.log(`[meenzy-welcome] Inbound "hi" from customer: ${r.contact_number}`);
+          if ((trimmedBody === 'hi' || trimmedBody === 'hello') && !r.__handled) {
+            console.log(`[meenzy-welcome] Inbound "hi" from customer: ${r.contact_number}`);
             
             const { resolveAccount, insertPendingRow } = require('../services/messageSender');
             const { enqueueSend } = require('../queue/sendQueue');
