@@ -49,10 +49,30 @@ async function handleOrderResolutionFlow(client, phone, account, btnId, insertPe
       
       const humanReason = reason === 'mistake' ? 'Bought by mistake' : (reason === 'price' ? 'Found better price' : 'Delayed delivery');
 
+      let itemName = 'Unknown Item';
+      let refundAmount = 0;
+
       if (orderId !== 'PREORDER') {
+        const orderRes = await client.query(`SELECT o.total_price, i.product_name FROM coexistence.ecosystem_orders o JOIN coexistence.ecosystem_order_items i ON o.id = i.order_id WHERE o.id = $1 LIMIT 1`, [orderId]).catch(()=>({rows:[]}));
+        if (orderRes.rows.length > 0) {
+          itemName = orderRes.rows[0].product_name;
+          refundAmount = orderRes.rows[0].total_price || 0;
+        }
         await client.query(`UPDATE coexistence.ecosystem_orders SET status = 'CANCELLED_REFUND', notes = COALESCE(notes, '') || '\nRefund Reason: ' || $2 WHERE id = $1`, [orderId, humanReason]).catch(()=>null);
+      } else {
+        const preRes = await client.query(`SELECT ordered_item FROM coexistence.meenzy_preorders WHERE customer_phone = $1 ORDER BY created_at DESC LIMIT 1`, [normalizedPhone]).catch(()=>({rows:[]}));
+        if (preRes.rows.length > 0) {
+          itemName = preRes.rows[0].ordered_item;
+        }
       }
+
       await client.query(`UPDATE coexistence.meenzy_preorders SET order_status = 'CANCELLED', notes = COALESCE(notes, '') || '\nRefund Reason: ' || $2 WHERE customer_phone = $1`, [normalizedPhone, humanReason]).catch(()=>null);
+      
+      // Insert into refunds table so it appears in Admin Portal
+      await client.query(
+        `INSERT INTO coexistence.meenzy_refunds (customer_phone, item_name, refund_amount, refund_status) VALUES ($1, $2, $3, 'PENDING')`,
+        [normalizedPhone, `${itemName} (${humanReason})`, refundAmount]
+      ).catch((e)=>console.error('Failed to insert refund log:', e));
       
       const msg = `Your order has been cancelled. If you already paid, the refund will be initiated to your original payment method in 3-5 business days.`;
       const localId = await insertPendingRow({ account, toNumber: normalizedPhone, messageType: 'text', messageBody: msg });
