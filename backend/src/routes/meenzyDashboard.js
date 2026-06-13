@@ -113,5 +113,15 @@ Give a concise, bulleted list of recommended purchase quantities. Keep it profes
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+router.get('/meenzy/dashboard/dynamic-pricing', async (req, res) => {
+  try {
+    const { generateDynamicPricingSuggestions } = require('../engine/dynamicPricingCron');
+    const suggestions = await generateDynamicPricingSuggestions();
+    res.json({ suggestions });
+  } catch (err) {
+    console.error('[dynamic-pricing-api] Error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 module.exports = router;

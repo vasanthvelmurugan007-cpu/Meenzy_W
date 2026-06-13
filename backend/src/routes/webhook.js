@@ -26,20 +26,52 @@ async function updateTemporaryCart(client, phone, item, quantity, step = 'buildi
   }
 }
 
-// === Cross Sell ===
-function getCrossSellRecommendation(cartItems) {
-  const hasRawFish = cartItems.some(i => i.ordered_item && i.ordered_item.match(/seer|tuna|salmon|prawn|pomfret|rohu/i));
-  const hasSpices = cartItems.some(i => i.ordered_item && i.ordered_item.match(/masala|marinade|spice/i));
-  if (hasRawFish && !hasSpices) {
-    return {
-      title: "Meenzy Special Fish Fry Masala",
-      price: 50,
-      id: "upsell_masala_01",
-      message: "🔥 Complete your meal! Add our signature Meenzy Fish Fry Masala (₹50) to perfectly complement your fresh catch?"
-    };
+// === AI Cross Sell ===
+async function generateCrossSellLLM(cartItems) {
+  try {
+    const apiKey = process.env.OPENROUTER_API_KEY || process.env.GEMINI_API_KEY;
+    if (!apiKey || !cartItems || cartItems.length === 0) return null;
+    
+    const itemsList = cartItems.map(i => i.ordered_item || i.item).join(', ');
+    const systemPrompt = `You are an expert seafood sales AI for Meenzy. 
+The customer has the following items in their cart: ${itemsList}.
+Suggest exactly ONE highly relevant cross-sell item (like a specific fish fry masala, marinades, or a complementary seafood item) to complete their meal.
+Return your response STRICTLY as a JSON object with these keys:
+- "title": Name of the suggested item (e.g., "Chettinad Fish Fry Masala")
+- "price": A realistic integer price in INR (e.g., 50, 150)
+- "message": A short, exciting 1-sentence sales pitch with an emoji.
+
+Output ONLY valid JSON. No markdown wrappers. Example: {"title": "Meenzy Special Fish Fry Masala", "price": 50, "message": "🔥 Complete your meal! Add our signature Meenzy Fish Fry Masala (₹50) to perfectly complement your fresh catch!"}`;
+
+    let text = null;
+    if (apiKey.startsWith("sk-or-v1-")) {
+      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST", headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "google/gemini-2.5-flash", max_tokens: 150, messages: [{ role: "system", content: systemPrompt }] })
+      });
+      const data = await response.json();
+      text = data?.choices?.[0]?.message?.content?.trim();
+    } else {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contents: [{ parts: [{ text: systemPrompt }] }] })
+      });
+      const data = await response.json();
+      text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    }
+    
+    if (text) {
+      const parsed = JSON.parse(text.replace(/```json/g, '').replace(/```/g, ''));
+      parsed.id = "ai_upsell_" + Math.floor(Math.random() * 1000);
+      return parsed;
+    }
+    return null;
+  } catch(e) {
+    console.error('[ai-cross-sell] Error:', e.message);
+    return null;
   }
-  return null;
 }
+
 
 // === LLM Triage ===
 async function triageWithLLM(messageText, preferences = null) {
@@ -154,6 +186,54 @@ ${preferences ? `Consider the user's saved preferences: ${preferences}\n` : ''}O
   }
 }
 
+// === LLM Multilingual FAQ Generation ===
+async function generateFAQResponseLLM(messageText) {
+  try {
+    const apiKey = process.env.OPENROUTER_API_KEY || process.env.GEMINI_API_KEY;
+    if (!apiKey) return null;
+    
+    const systemPrompt = `You are a friendly customer service AI for Meenzy Fresh Seafood.
+Your job is to answer general questions or delivery inquiries based on our business context.
+Context: Meenzy delivers fresh, live-catch seafood to the customer's door. We operate primarily online.
+CRITICAL INSTRUCTION: You must reply in the EXACT SAME LANGUAGE the customer used in their message. If they used English, use English. If they used Tamil (or Tanglish), use Tamil. If Hindi, use Hindi. Keep the response concise, helpful, and use emojis.
+
+Customer Message: "${messageText}"`;
+
+    let text = null;
+    if (apiKey.startsWith("sk-or-v1-")) {
+      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          "model": "google/gemini-2.5-flash",
+          "max_tokens": 500,
+          "messages": [
+            { "role": "system", "content": systemPrompt }
+          ]
+        })
+      });
+      const data = await response.json();
+      text = data?.choices?.[0]?.message?.content?.trim();
+    } else {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          "contents": [{ "parts": [{"text": systemPrompt}] }]
+        })
+      });
+      const data = await response.json();
+      text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    }
+    return text;
+  } catch(e) {
+    console.error('[llm-faq] Error:', e.message);
+    return null;
+  }
+}
 
 // Robust TSV Parser to handle multi-line quotes and TSV structure
 function parseTSV(text) {
@@ -1103,7 +1183,13 @@ router.post('/webhook/whatsapp', async (req, res) => {
                  const { enqueueSend } = require('../queue/sendQueue');
                  const { account, error } = await resolveAccount({});
                  if (!error && account) {
-                   const text = "We are so sorry to hear you're experiencing an issue! 😔 We have flagged this as high priority and a senior manager will review it and message you shortly.";
+                   const { handleAIComplaintResolution } = require('../engine/aiComplaintResolver');
+                   let text = await handleAIComplaintResolution(r.contact_number, trimmedBody);
+                   
+                   if (!text) {
+                     text = "We are so sorry to hear you're experiencing an issue! 😔 We have flagged this as high priority and a senior manager will review it and message you shortly.";
+                   }
+                   
                    const localId = await insertPendingRow({ account, toNumber: r.contact_number, messageType: 'text', messageBody: text });
                    await enqueueSend({ kind: 'text', accountId: account.id, to: String(r.contact_number).replace(/\D/g, ''), localMessageId: localId, payload: { body: text, previewUrl: false } });
                  }
@@ -1141,6 +1227,11 @@ router.post('/webhook/whatsapp', async (req, res) => {
 
                       confMsg += `\nYour smart cart is ready! 🛒\n\nPlease click the link below to review your exact order details and securely checkout on our website:\n${checkoutUrl}\n\nThank you for choosing Meenzy Fresh Seafood! 🍽️`;
                       
+                      const crossSell = await generateCrossSellLLM(cartPayload);
+                      if (crossSell) {
+                        confMsg += `\n\n${crossSell.message}`;
+                      }
+
                       const localId = await insertPendingRow({ account, toNumber: r.contact_number, messageType: 'text', messageBody: confMsg });
                       await enqueueSend({ kind: 'text', accountId: account.id, to: String(r.contact_number).replace(/\D/g, ''), localMessageId: localId, payload: { body: confMsg, previewUrl: true } });
                       
@@ -1159,6 +1250,19 @@ router.post('/webhook/whatsapp', async (req, res) => {
                     }
                   }
                   r.__handled = true;
+               } else if (intent === 'GENERAL_FAQ' || intent === 'DELIVERY_QUERY') {
+                 const text = await generateFAQResponseLLM(trimmedBody);
+                 if (text) {
+                   const { resolveAccount, insertPendingRow } = require('../services/messageSender');
+                   const { enqueueSend } = require('../queue/sendQueue');
+                   const { account, error } = await resolveAccount({});
+                   if (!error && account) {
+                     const localId = await insertPendingRow({ account, toNumber: r.contact_number, messageType: 'text', messageBody: text });
+                     await enqueueSend({ kind: 'text', accountId: account.id, to: String(r.contact_number).replace(/\D/g, ''), localMessageId: localId, payload: { body: text, previewUrl: false } });
+                   }
+                   console.log(`[llm-triage] Sent dynamic FAQ response for ${r.contact_number}`);
+                   r.__handled = true;
+                 }
                }
              }
           }
