@@ -1,7 +1,7 @@
 import {
   Home, Zap, LayoutTemplate, MessageCircle, Users, UserCheck, Navigation,
   Megaphone, Image as ImageIcon, KanbanSquare, ShoppingBag, Landmark, Truck,
-  Archive, TrendingUp, LayoutDashboard, Sparkles
+  Archive, TrendingUp, LayoutDashboard, Sparkles, Store
 } from 'lucide-react';
 import { C, FONT } from '../constants.js';
 
@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { id: 'chats', label: 'Chats', Icon: MessageCircle },
   { id: 'contacts', label: 'Contacts', Icon: Users },
   { id: 'preorders', label: 'Preorders', Icon: ShoppingBag },
+  { id: 'b2b-portal', label: 'B2B Wholesale', Icon: Store },
   { id: 'batch-agent', label: 'Batch Agent', Icon: Archive },
   { id: 'demand-forecast', label: 'Forecasting', Icon: TrendingUp },
   { id: 'refunds', label: 'Refunds', Icon: Landmark },
