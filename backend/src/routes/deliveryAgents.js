@@ -106,11 +106,11 @@ router.put('/:id/location', async (req, res) => {
   }
 });
 
-// DELETE (soft delete) agent
+// DELETE agent
 router.delete('/:id', async (req, res) => {
   const { id } = req.params;
   try {
-    await pool.query('UPDATE coexistence.delivery_agents SET is_active = false WHERE id = $1', [id]);
+    await pool.query('DELETE FROM coexistence.delivery_agents WHERE id = $1', [id]);
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ error: err.message });
