@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import api from '../api';
+import { api } from '../api';
 import './B2BPortal.css'; // Let's use some inline or shared styles
 
 function B2BPortal() {
@@ -17,8 +17,8 @@ function B2BPortal() {
 
   const fetchProducts = async () => {
     try {
-      const res = await api.get('/b2b/products');
-      setProducts(res.data);
+      const res = await api.b2b.products();
+      setProducts(res);
       setLoading(false);
     } catch (err) {
       console.error(err);
@@ -45,7 +45,7 @@ function B2BPortal() {
     }
 
     try {
-      await api.post('/b2b/order', {
+      await api.b2b.order({
         businessName,
         phone,
         gstNumber,

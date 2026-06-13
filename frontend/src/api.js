@@ -22,6 +22,10 @@ export const api = {
   dashboard: (range = '7d') => req(`/dashboard?range=${encodeURIComponent(range)}`),
   meenzyDashboard: () => req('/meenzy/dashboard/stats'),
   meenzyCampaignAudience: (item) => req(`/meenzy/campaigns/target-audience?item=${encodeURIComponent(item)}`),
+  b2b: {
+    products: () => req('/b2b/products'),
+    order: (data) => req('/b2b/order', { method: 'POST', body: JSON.stringify(data) }),
+  },
   meenzyCampaignGenerate: (item) => req('/meenzy/campaigns/generate', { method: 'POST', body: JSON.stringify({ item }) }),
   meenzyCampaignSend: (phones, message) => req('/meenzy/campaigns/send', { method: 'POST', body: JSON.stringify({ phones, message }) }),
   dashboardDetails: (metric, range = '7d') =>
