@@ -24,7 +24,7 @@ export default function AgentLogin({ onLogin, onGoToRegister }) {
   };
 
   return (
-    <div style={{ padding: 20, fontFamily: FONT, background: '#f3f4f6', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <div style={{ padding: 20, fontFamily: FONT, background: '#f3f4f6', height: '100vh', overflowY: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ background: '#fff', padding: '40px 30px', borderRadius: 16, boxShadow: '0 10px 25px rgba(0,0,0,0.1)', width: '100%', maxWidth: 400 }}>
         <div style={{ textAlign: 'center', marginBottom: 30 }}>
           <div style={{ background: '#3b82f6', width: 64, height: 64, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>

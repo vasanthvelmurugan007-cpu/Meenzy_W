@@ -515,7 +515,7 @@ export default function AgentPortalPage() {
   }
 
   return (
-    <div style={{ fontFamily: FONT, background: theme.bg, minHeight: '100vh', paddingBottom: 40, color: theme.text, transition: 'background 0.3s' }}>
+    <div style={{ fontFamily: FONT, background: theme.bg, height: '100vh', overflowY: 'auto', paddingBottom: 40, color: theme.text, transition: 'background 0.3s' }}>
       {/* Header & Tabs */}
       <div style={{ background: theme.cardBg, padding: '20px 20px 0 20px', borderBottom: `1px solid ${theme.border}`, position: 'sticky', top: 0, zIndex: 10, transition: 'background 0.3s' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', maxWidth: 600, margin: '0 auto', paddingBottom: 16 }}>
