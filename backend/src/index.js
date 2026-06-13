@@ -181,6 +181,7 @@ async function start() {
   try {
     await pool.query(`ALTER TABLE coexistence.meenzy_preorders ADD COLUMN IF NOT EXISTS feedback_sent BOOLEAN DEFAULT false;`);
     await pool.query(`ALTER TABLE coexistence.ecosystem_orders ADD COLUMN IF NOT EXISTS notes TEXT;`);
+    await pool.query(`ALTER TABLE coexistence.ecosystem_orders ADD COLUMN IF NOT EXISTS delivery_instructions TEXT;`);
   } catch(e) { console.error('Failed to add schema columns:', e); }
 
   startFeedbackCron();
