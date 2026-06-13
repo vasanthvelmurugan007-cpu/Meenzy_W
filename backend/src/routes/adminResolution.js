@@ -62,6 +62,22 @@ router.post('/bulk-assign', async (req, res) => {
       `, [agentId, deliveryOtp]);
     }
 
+    if (result && result.rowCount > 0) {
+      const { resolveAccount, insertPendingRow } = require('../services/messageSender');
+      const { enqueueSend } = require('../queue/sendQueue');
+      const { account } = await resolveAccount({});
+      if (account) {
+        const agentRes = await pool.query('SELECT phone FROM coexistence.delivery_agents WHERE id = $1', [agentId]);
+        if (agentRes.rows.length > 0 && agentRes.rows[0].phone) {
+          const agentPhone = String(agentRes.rows[0].phone).replace(/\D/g, '');
+          const portalUrl = `${process.env.CORS_ORIGIN || 'https://meenzy-frontend.onrender.com'}/#/agent-login`;
+          const agentMsg = `🚚 *New Deliveries Assigned!*\n\nYou have been assigned ${result.rowCount} new order(s).\n\nPlease open your Agent Portal to view your routes:\n${portalUrl}`;
+          const agentLocalId = await insertPendingRow({ account, toNumber: agentPhone, messageType: 'text', messageBody: 'Sent bulk assignment to agent' });
+          await enqueueSend({ kind: 'text', accountId: account.id, to: agentPhone, localMessageId: agentLocalId, payload: { body: agentMsg, previewUrl: false } });
+        }
+      }
+    }
+
     res.json({ success: true, assignedCount: result.rowCount });
   } catch (err) {
     console.error('Bulk assign agent error:', err);
@@ -338,7 +354,7 @@ router.put('/:id/assign', async (req, res) => {
         if (account) {
           const toPhone = String(order.user_phone).replace(/\D/g, '');
           const trackingPhone = toPhone.slice(-4);
-          const trackingLink = `${process.env.CORS_ORIGIN}/#/track/${id}?phone=${trackingPhone}`;
+          const trackingLink = `${process.env.CORS_ORIGIN || 'https://meenzy-frontend.onrender.com'}/#/track/${id}?phone=${trackingPhone}`;
           
           const msgText = `🚚 *Out for Delivery!*\n\nYour Meenzy order #${id.slice(0,6)} has been assigned to a delivery agent and is on its way!\n\n🔑 *Delivery OTP:* ${otp}\n(Please share this code with the driver to receive your order)\n\n📍 *Track your order live:*\n${trackingLink}`;
           
@@ -349,6 +365,16 @@ router.put('/:id/assign', async (req, res) => {
             kind: 'text', accountId: account.id, to: toPhone, localMessageId: localId,
             payload: { body: msgText, previewUrl: false }
           });
+          
+          // Send WhatsApp notification to Agent
+          const agentRes = await client.query('SELECT phone FROM coexistence.delivery_agents WHERE id = $1', [agent_id]);
+          if (agentRes.rows.length > 0 && agentRes.rows[0].phone) {
+            const agentPhone = String(agentRes.rows[0].phone).replace(/\D/g, '');
+            const portalUrl = `${process.env.CORS_ORIGIN || 'https://meenzy-frontend.onrender.com'}/#/agent-login`;
+            const agentMsg = `🚚 *New Delivery Assigned!*\n\nYou have been assigned Order #${id.slice(0,6)}.\n\nPlease open your Agent Portal to view the route and details:\n${portalUrl}`;
+            const agentLocalId = await insertPendingRow({ account, toNumber: agentPhone, messageType: 'text', messageBody: 'Sent delivery assignment to agent' });
+            await enqueueSend({ kind: 'text', accountId: account.id, to: agentPhone, localMessageId: agentLocalId, payload: { body: agentMsg, previewUrl: false } });
+          }
         }
       }
     }
