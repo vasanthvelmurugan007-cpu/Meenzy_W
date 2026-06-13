@@ -67,7 +67,7 @@ router.post('/', async (req, res) => {
           account,
           toNumber: phone,
           messageType: 'text',
-          messageBody: 'Sent Agent Welcome Message',
+          messageBody: messageBody,
         });
 
         await enqueueSend({

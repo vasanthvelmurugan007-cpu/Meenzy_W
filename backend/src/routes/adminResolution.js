@@ -70,9 +70,9 @@ router.post('/bulk-assign', async (req, res) => {
         const agentRes = await pool.query('SELECT phone FROM coexistence.delivery_agents WHERE id = $1', [agentId]);
         if (agentRes.rows.length > 0 && agentRes.rows[0].phone) {
           const agentPhone = String(agentRes.rows[0].phone).replace(/\D/g, '');
-          const portalUrl = `${process.env.CORS_ORIGIN || 'https://meenzy-frontend.onrender.com'}/#/agent-login`;
+          const portalUrl = `${process.env.CORS_ORIGIN || 'https://meenzy-frontend.onrender.com'}/#/agent-portal`;
           const agentMsg = `🚚 *New Deliveries Assigned!*\n\nYou have been assigned ${result.rowCount} new order(s).\n\nPlease open your Agent Portal to view your routes:\n${portalUrl}`;
-          const agentLocalId = await insertPendingRow({ account, toNumber: agentPhone, messageType: 'text', messageBody: 'Sent bulk assignment to agent' });
+          const agentLocalId = await insertPendingRow({ account, toNumber: agentPhone, messageType: 'text', messageBody: agentMsg });
           await enqueueSend({ kind: 'text', accountId: account.id, to: agentPhone, localMessageId: agentLocalId, payload: { body: agentMsg, previewUrl: false } });
         }
       }
@@ -370,9 +370,9 @@ router.put('/:id/assign', async (req, res) => {
           const agentRes = await client.query('SELECT phone FROM coexistence.delivery_agents WHERE id = $1', [agent_id]);
           if (agentRes.rows.length > 0 && agentRes.rows[0].phone) {
             const agentPhone = String(agentRes.rows[0].phone).replace(/\D/g, '');
-            const portalUrl = `${process.env.CORS_ORIGIN || 'https://meenzy-frontend.onrender.com'}/#/agent-login`;
+            const portalUrl = `${process.env.CORS_ORIGIN || 'https://meenzy-frontend.onrender.com'}/#/agent-portal`;
             const agentMsg = `🚚 *New Delivery Assigned!*\n\nYou have been assigned Order #${id.slice(0,6)}.\n\nPlease open your Agent Portal to view the route and details:\n${portalUrl}`;
-            const agentLocalId = await insertPendingRow({ account, toNumber: agentPhone, messageType: 'text', messageBody: 'Sent delivery assignment to agent' });
+            const agentLocalId = await insertPendingRow({ account, toNumber: agentPhone, messageType: 'text', messageBody: agentMsg });
             await enqueueSend({ kind: 'text', accountId: account.id, to: agentPhone, localMessageId: agentLocalId, payload: { body: agentMsg, previewUrl: false } });
           }
         }
