@@ -13,8 +13,8 @@ function startFeedbackCron() {
         SELECT id, customer_phone, ordered_item
         FROM coexistence.meenzy_preorders
         WHERE order_status = 'DELIVERED' 
-          AND delivered_at < NOW() - INTERVAL '2 hours'
-          AND feedback_sent = false
+          AND updated_at < NOW() - INTERVAL '2 hours'
+          AND (feedback_sent = false OR feedback_sent IS NULL)
       `);
 
       if (rows.length === 0) return;

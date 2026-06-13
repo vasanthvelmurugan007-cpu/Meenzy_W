@@ -175,8 +175,14 @@ async function start() {
   startMediaWorker();
   startSendWorker();
   startAbandonmentCron();
-  startFeedbackCron();
   startExceptionWorker();
+  
+  // Ensure feedback_sent column exists
+  try {
+    await pool.query(`ALTER TABLE coexistence.meenzy_preorders ADD COLUMN IF NOT EXISTS feedback_sent BOOLEAN DEFAULT false;`);
+  } catch(e) { console.error('Failed to add feedback_sent:', e); }
+
+  startFeedbackCron();
   startExpiryCron();
   startSubscriptionCron();
   startPredictiveReorderCron();
