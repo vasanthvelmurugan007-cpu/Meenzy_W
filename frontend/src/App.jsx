@@ -120,7 +120,7 @@ export default function App() {
   }
 
   const isB2BPortal = page === 'b2b-portal';
-  if (isB2BPortal) {
+  if (isB2BPortal && !user) {
     return <B2BPortal />;
   }
 
@@ -144,6 +144,7 @@ export default function App() {
       case 'refunds': return <RefundsPage />;
       case 'deliveries': return <DeliveriesPage />;
       case 'agents': return <AgentsPage />;
+      case 'b2b-portal': return <B2BPortal />;
       case 'batch-agent': return <BatchAgentPage />;
       case 'demand-forecast': return <DemandForecastPage />;
       case 'marketing': return <MarketingPage />;
