@@ -127,6 +127,7 @@ app.use('/api', require('./routes/campaigns'));
 app.use('/api', require('./routes/delivery'));
 app.use('/api', deliveryExceptionsRouter);
 app.use('/api/tracking', trackingRouter);
+app.use('/api/b2b', require('./routes/b2b'));
 
 // Auth routes (public)
 app.use('/api', authRouter);

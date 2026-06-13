@@ -1019,6 +1019,42 @@ router.post('/webhook/whatsapp', async (req, res) => {
               continue;
             }
 
+            if (btnId.startsWith('flash_buy_')) {
+              const fsId = parseInt(btnId.replace('flash_buy_', ''), 10);
+              
+              // 1. Check stock and decrement using row-level locking
+              const stockRes = await client.query(`
+                UPDATE coexistence.meenzy_flash_sales
+                SET remaining_quantity = remaining_quantity - 1
+                WHERE id = $1 AND remaining_quantity >= 1 AND is_active = TRUE
+                RETURNING product_name, price
+              `, [fsId]);
+              
+              let msgText = "";
+              if (stockRes.rows.length > 0) {
+                const fs = stockRes.rows[0];
+                // 2. Create the preorder
+                await client.query(`
+                  INSERT INTO coexistence.meenzy_preorders (customer_phone, ordered_item, quantity, order_status)
+                  VALUES ($1, $2, 1, 'pending_market')
+                `, [r.contact_number, fs.product_name]);
+                
+                msgText = `🎉 *Got it!* You successfully secured 1Kg of ${fs.product_name} at the flash price of ₹${fs.price}!\n\nWe will send your tracking link shortly.`;
+              } else {
+                msgText = `😔 *Sold Out!* Sorry, the flash sale for this item has completely sold out or ended. Better luck next time!`;
+              }
+              
+              const localId = await insertPendingRow({
+                account, toNumber: r.contact_number, messageType: 'text', messageBody: msgText
+              });
+              await enqueueSend({
+                kind: 'text', accountId: account.id, to: String(r.contact_number).replace(/\D/g, ''), localMessageId: localId, payload: { body: msgText, previewUrl: false }
+              });
+              
+              r.__handled = true;
+              continue;
+            }
+
             const handled = await handleCartState(r.contact_number, account, btnId);
             if (handled) continue;
           }
@@ -1360,28 +1396,32 @@ router.post('/webhook/whatsapp', async (req, res) => {
                     const transcript = data.text;
                     console.log('[voice-order] Transcribed text:', transcript);
                     
-                    const intent = await triageWithLLM(transcript);
-                    if (intent === 'PLACING_ORDER') {
-                      const items = await extractOrderLLM(transcript);
-                      const { resolveAccount, insertPendingRow } = require('../services/messageSender');
-                      const { enqueueSend } = require('../queue/sendQueue');
-                      const { account, error } = await resolveAccount({});
-                      
-                      if (!error && account && items && items.length > 0) {
-                        let confMsg = `🎤 *Voice Order Received!*\n\nI heard: "${transcript}"\n\nI've extracted these items:\n\n`;
-                        for (const order of items) {
-                          const qty = parseFloat(order.qty) || 1;
-                          await pool.query(
-                            `INSERT INTO coexistence.meenzy_preorders (customer_phone, ordered_item, quantity) VALUES ($1, $2, $3)`,
-                            [r.contact_number, order.item, qty]
-                          );
-                          confMsg += `🐟 *${order.item}* - ${qty} Kg\n`;
-                        }
-                        confMsg += `\nYour preorder is registered! Once we verify availability in today's fresh market catch, we will confirm and notify you. Thank you! 🍽️`;
-                        const localId = await insertPendingRow({ account, toNumber: r.contact_number, messageType: 'text', messageBody: confMsg });
-                        await enqueueSend({ kind: 'text', accountId: account.id, to: String(r.contact_number).replace(/\D/g, ''), localMessageId: localId, payload: { body: confMsg, previewUrl: false } });
-                      }
-                    }
+                    const fetch = require('node-fetch');
+                    const dummyReq = {
+                      object: 'whatsapp_business_account',
+                      entry: [{
+                        changes: [{
+                          value: {
+                            messaging_product: 'whatsapp',
+                            metadata: { phone_number_id: r.phone_number_id || '' },
+                            contacts: [{ wa_id: r.wa_number, profile: { name: r.contact_name || '' } }],
+                            messages: [{
+                              from: r.contact_number,
+                              id: 'voice_' + r.message_id,
+                              timestamp: Math.floor(Date.now() / 1000).toString(),
+                              type: 'text',
+                              text: { body: transcript }
+                            }]
+                          }
+                        }]
+                      }]
+                    };
+                    
+                    fetch(`http://127.0.0.1:${process.env.PORT || 3000}/api/webhook/whatsapp`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify(dummyReq)
+                    }).catch(e => console.error('[voice-loopback] Error:', e.message));
                   }
                 } catch (e) {
                   console.error('[voice-order] Transcription error:', e);

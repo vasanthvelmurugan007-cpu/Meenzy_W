@@ -124,4 +124,31 @@ router.get('/meenzy/dashboard/dynamic-pricing', async (req, res) => {
   }
 });
 
+router.post('/meenzy/dashboard/flash-sales/trigger', async (req, res) => {
+  const { productName, price, quantity, message } = req.body;
+  if (!productName || !price || !quantity || !message) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  try {
+    const { triggerFlashSale } = require('../engine/flashSalesManager');
+    const result = await triggerFlashSale(productName, price, quantity, message);
+    res.json(result);
+  } catch (err) {
+    console.error('[flash-sales-api] Error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/meenzy/dashboard/zero-waste/trigger', async (req, res) => {
+  try {
+    const { generateZeroWasteDiscounts } = require('../engine/zeroWasteCron');
+    const result = await generateZeroWasteDiscounts();
+    res.json(result || { ok: false, msg: "No items selected for zero waste" });
+  } catch (err) {
+    console.error('[zero-waste-api] Error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 module.exports = router;

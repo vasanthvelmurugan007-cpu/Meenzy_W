@@ -29,9 +29,11 @@ import SmartCampaignsPage from './pages/SmartCampaignsPage.jsx';
 import MarketingPage from './pages/MarketingPage.jsx';
 import SentimentPage from './pages/SentimentPage.jsx';
 
+import B2BPortal from './pages/B2BPortal.jsx';
+
 const VALID_PAGES = new Set([
   'home', 'dashboard', 'smart-campaigns', 'chatbot-builder', 'template-builder', 'chats',
-  'contacts', 'preorders', 'refunds', 'pipelines', 'bulk-message', 'admin-settings', 'media-library', 'catalog', 'deliveries', 'track', 'agents', 'agent-portal', 'batch-agent', 'demand-forecast', 'marketing', 'sentiment'
+  'contacts', 'preorders', 'refunds', 'pipelines', 'bulk-message', 'admin-settings', 'media-library', 'catalog', 'deliveries', 'track', 'agents', 'agent-portal', 'batch-agent', 'demand-forecast', 'marketing', 'sentiment', 'b2b-portal'
 ]);
 
 export default function App() {
@@ -115,6 +117,11 @@ export default function App() {
 
   if (isAgentPortal) {
     return <AgentPortalPage />;
+  }
+
+  const isB2BPortal = page === 'b2b-portal';
+  if (isB2BPortal) {
+    return <B2BPortal />;
   }
 
   if (!user) {
