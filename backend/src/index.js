@@ -177,10 +177,11 @@ async function start() {
   startAbandonmentCron();
   startExceptionWorker();
   
-  // Ensure feedback_sent column exists
+  // Ensure schema changes
   try {
     await pool.query(`ALTER TABLE coexistence.meenzy_preorders ADD COLUMN IF NOT EXISTS feedback_sent BOOLEAN DEFAULT false;`);
-  } catch(e) { console.error('Failed to add feedback_sent:', e); }
+    await pool.query(`ALTER TABLE coexistence.ecosystem_orders ADD COLUMN IF NOT EXISTS notes TEXT;`);
+  } catch(e) { console.error('Failed to add schema columns:', e); }
 
   startFeedbackCron();
   startExpiryCron();

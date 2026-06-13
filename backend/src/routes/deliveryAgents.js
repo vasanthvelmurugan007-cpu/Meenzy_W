@@ -59,7 +59,7 @@ router.post('/', async (req, res) => {
       if (account) {
         // Construct the frontend URL (fallback to live frontend if missing)
         const baseUrl = (process.env.CORS_ORIGIN || 'https://meenzy-frontend.onrender.com').replace(/\/$/, '');
-        const portalUrl = `${baseUrl}/#/agent-login`;
+        const portalUrl = `${baseUrl}/#/agent-portal`;
         
         const messageBody = `Hello ${name} 🚚!\n\nYou have been successfully registered as a Meenzy Delivery Agent.\n\nPlease log in to the Agent Portal here to view and manage your assigned deliveries:\n🔗 ${portalUrl}\n\n*Your Login Details:*\n📱 Phone: ${phone}\n🔒 PIN: ${pin}\n\nDrive safe!`;
         
