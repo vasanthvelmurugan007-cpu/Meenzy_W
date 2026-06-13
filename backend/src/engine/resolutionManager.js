@@ -83,9 +83,10 @@ async function handleOrderResolutionFlow(client, phone, account, btnId, insertPe
     // 4. Swap Fish Option Selected
     if (btnId.startsWith('resolution_swap_')) {
       const orderId = btnId.replace('resolution_swap_', '');
+      const catalogUrl = 'https://www.meenzy.in';
       const payload = {
         type: "list",
-        body: { text: "Which fish would you like to swap your order to?" },
+        body: { text: `Which fish would you like to swap your order to?\n\nIf you'd like to browse more options, here is our live catalogue: ${catalogUrl}` },
         action: {
           button: "Select Fish",
           sections: [
