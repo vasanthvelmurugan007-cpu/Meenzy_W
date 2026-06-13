@@ -770,18 +770,23 @@ router.post('/webhook/whatsapp', async (req, res) => {
 
             if (resolvedItem) {
               await client.query(
-                `INSERT INTO coexistence.meenzy_preorders (customer_phone, ordered_item, quantity)
-                 VALUES ($1, $2, $3)`,
+                `INSERT INTO coexistence.meenzy_preorders (customer_phone, ordered_item, quantity, order_status)
+                 VALUES ($1, $2, $3, 'PENDING_CHECKOUT')`,
                 [r.contact_number, resolvedItem, qty]
               );
               console.log(`[meenzy-preorder] Successfully created preorder: customer=${r.contact_number}, item=${resolvedItem}, quantity=${qty}`);
               
-              // Send WhatsApp Order Confirmation Message
+              // Send WhatsApp Order Confirmation Message with Cart Link
               const { resolveAccount, insertPendingRow } = require('../services/messageSender');
               const { enqueueSend } = require('../queue/sendQueue');
               const { account, error } = await resolveAccount({});
               if (!error && account) {
-                const confText = `🐟 *Meenzy Preorder Confirmed!* 🌊\n\nYour preorder for *${resolvedItem} (${qty} kg)* has been successfully registered! Once we verify availability in today's fresh market catch, we will confirm and notify you! Thank you! 🍽️`;
+                const cartPayload = [{ item: resolvedItem, qty }];
+                const base64Cart = Buffer.from(JSON.stringify(cartPayload)).toString('base64');
+                const encodedCart = encodeURIComponent(base64Cart);
+                const checkoutUrl = `https://www.meenzy.in/cart-page?data=${encodedCart}&phone=${r.contact_number}`;
+                
+                const confText = `🐟 *Meenzy Preorder Initiated!* 🌊\n\nYour preorder for *${resolvedItem} (${qty} kg)* is almost ready!\n\nPlease click the link below to review your exact order details, see the price, and securely checkout on our website:\n${checkoutUrl}\n\nThank you! 🍽️`;
                 const localId = await insertPendingRow({
                   account,
                   toNumber: r.contact_number,
@@ -793,7 +798,7 @@ router.post('/webhook/whatsapp', async (req, res) => {
                   accountId: account.id,
                   to: String(r.contact_number).replace(/\D/g, ''),
                   localMessageId: localId,
-                  payload: { body: confText, previewUrl: false },
+                  payload: { body: confText, previewUrl: true },
                 });
                 console.log(`[meenzy-preorder] Sent registration confirmation to: ${r.contact_number}`);
               }
