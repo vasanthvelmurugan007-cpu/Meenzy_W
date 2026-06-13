@@ -13,6 +13,7 @@ services:
   - type: redis
     name: meenzy-redis
     plan: free
+    ipAllowList: []
 
   # -------------------------
   # 3. Backend (Node.js API)
