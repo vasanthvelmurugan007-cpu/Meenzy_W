@@ -79,11 +79,15 @@ router.post('/login', async (req, res) => {
   }
 
   try {
+    // Normalize phone to just digits
+    const digits = phone.replace(/\D/g, '');
+    const last10 = digits.slice(-10);
+
     const { rows } = await pool.query(`
       SELECT id, name, phone, vehicle_info, pin_hash, is_active
       FROM coexistence.delivery_agents
-      WHERE phone = $1
-    `, [phone]);
+      WHERE RIGHT(REGEXP_REPLACE(phone, '\\D', '', 'g'), 10) = $1
+    `, [last10]);
 
     if (rows.length === 0) {
       return res.status(401).json({ error: 'Invalid phone or PIN.' });
