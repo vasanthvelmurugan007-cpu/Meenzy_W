@@ -4,7 +4,6 @@ databases:
   # -------------------------
   - name: meenzy-db
     databaseName: meenzy
-    user: meenzy
     plan: free
 
 services:
