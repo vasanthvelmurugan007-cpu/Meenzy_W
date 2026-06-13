@@ -24,10 +24,10 @@ router.post('/register', async (req, res) => {
 
     const pin_hash = await bcrypt.hash(pin, 10);
     const { rows } = await pool.query(`
-      INSERT INTO coexistence.delivery_agents (name, phone, vehicle_info, pin_hash, is_active)
-      VALUES ($1, $2, $3, $4, true)
+      INSERT INTO coexistence.delivery_agents (name, phone, vehicle_info, pin_hash, plain_pin, is_active)
+      VALUES ($1, $2, $3, $4, $5, true)
       RETURNING id, name, phone, vehicle_info
-    `, [name, phone, vehicle_info, pin_hash]);
+    `, [name, phone, vehicle_info, pin_hash, pin]);
 
     const agent = rows[0];
     const token = jwt.sign({ id: agent.id, role: 'agent' }, JWT_SECRET, { expiresIn: '30d' });

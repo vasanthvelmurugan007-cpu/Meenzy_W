@@ -859,9 +859,20 @@ router.post('/webhook/whatsapp', async (req, res) => {
           
           if (trimmedBody === 'hi iam agent') {
             // Check if sender is a Delivery Agent
-            const agentRes = await client.query('SELECT name, phone, plain_pin FROM coexistence.delivery_agents WHERE RIGHT(REGEXP_REPLACE(phone, \'\\D\', \'\', \'g\'), 10) = RIGHT(REGEXP_REPLACE($1, \'\\D\', \'\', \'g\'), 10)', [r.contact_number]);
+            const agentRes = await client.query('SELECT id, name, phone, plain_pin FROM coexistence.delivery_agents WHERE RIGHT(REGEXP_REPLACE(phone, \'\\D\', \'\', \'g\'), 10) = RIGHT(REGEXP_REPLACE($1, \'\\D\', \'\', \'g\'), 10)', [r.contact_number]);
             if (agentRes.rows.length > 0) {
+              const agentId = agentRes.rows[0].id;
               const agentName = agentRes.rows[0].name;
+              let displayPin = agentRes.rows[0].plain_pin;
+
+              // Auto-heal missing plaintext PIN for legacy agents
+              if (!displayPin) {
+                const bcrypt = require('bcryptjs');
+                displayPin = Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit pin
+                const hash = await bcrypt.hash(displayPin, 10);
+                await client.query('UPDATE coexistence.delivery_agents SET plain_pin = $1, pin_hash = $2 WHERE id = $3', [displayPin, hash, agentId]);
+              }
+
               console.log(`[delivery-agent] Intercepted agent login from agent: ${agentName} (${r.contact_number})`);
               
               const { resolveAccount, insertPendingRow } = require('../services/messageSender');
@@ -869,7 +880,6 @@ router.post('/webhook/whatsapp', async (req, res) => {
               const { account, error } = await resolveAccount({});
               if (!error && account) {
                 const portalUrl = `${process.env.CORS_ORIGIN || 'https://meenzy-frontend.onrender.com'}/#/agent-portal`;
-                const displayPin = agentRes.rows[0].plain_pin || '(Your secure 6-digit PIN)';
                 const agentMsg = `Welcome back, ${agentName} 🚚!\n\nHere is your portal link to view and manage your assigned deliveries:\n🔗 ${portalUrl}\n\n*Your Login Details:*\n📱 Phone: ${agentRes.rows[0].phone}\n🔒 PIN: ${displayPin}\n\nDrive safe!`;
                 const localId = await insertPendingRow({ account, toNumber: r.contact_number, messageType: 'text', messageBody: agentMsg });
                 await enqueueSend({ kind: 'text', accountId: account.id, to: String(r.contact_number).replace(/\D/g, ''), localMessageId: localId, payload: { body: agentMsg, previewUrl: false } });
