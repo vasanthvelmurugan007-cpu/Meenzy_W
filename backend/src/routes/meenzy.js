@@ -387,7 +387,7 @@ router.post('/meenzy/inventory-failure', async (req, res) => {
     const preordersRes = await pool.query(
       `UPDATE coexistence.meenzy_preorders
        SET order_status = 'AWAITING_FAILURE_SWAP'
-       WHERE ordered_item ILIKE $1 AND LOWER(order_status) IN ('pending_confirmation', 'pending_market', 'awaiting_delivery_pref', 'confirmed')
+       WHERE ordered_item ILIKE $1 AND LOWER(order_status) IN ('pending_confirmation', 'pending_market', 'awaiting_delivery_pref', 'confirmed', 'pending_checkout')
        RETURNING customer_phone`,
       [`${ordered_item}%`]
     );
@@ -464,7 +464,7 @@ router.post('/meenzy/inventory-confirm', async (req, res) => {
     const preordersRes = await pool.query(
       `UPDATE coexistence.meenzy_preorders
        SET order_status = 'confirmed'
-       WHERE ordered_item ILIKE $1 AND LOWER(order_status) IN ('pending_confirmation', 'pending_market', 'awaiting_delivery_pref', 'confirmed')
+       WHERE ordered_item ILIKE $1 AND LOWER(order_status) IN ('pending_confirmation', 'pending_market', 'awaiting_delivery_pref', 'confirmed', 'pending_checkout')
        RETURNING customer_phone`,
       [`${ordered_item}%`]
     );
