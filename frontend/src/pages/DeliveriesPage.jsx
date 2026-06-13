@@ -452,8 +452,22 @@ export default function DeliveriesPage() {
                         <option value="DISPATCHED_TO_3PL">Dispatched</option>
                         <option value="DELIVERED">Delivered</option>
                         <option value="DELIVERY_FAILED_DISPUTED">Disputed</option>
+                        <option value="POSTPONED">Postponed</option>
+                        <option value="CANCELLED_REFUND">Cancelled (Refund)</option>
+                        <option value="PENDING_REPLACEMENT">Pending Replacement</option>
+                        <option value="SWAPPED">Swapped</option>
                         <option value="CANCELLED">Cancelled</option>
                       </select>
+                      {order.delivery_instructions && (
+                        <div style={{ marginTop: 6, fontSize: 11, color: '#7C3AED', fontWeight: 600, whiteSpace: 'pre-wrap' }}>
+                          {order.delivery_instructions}
+                        </div>
+                      )}
+                      {order.notes && (
+                        <div style={{ marginTop: 4, fontSize: 11, color: '#EF4444', fontStyle: 'italic', whiteSpace: 'pre-wrap' }}>
+                          {order.notes}
+                        </div>
+                      )}
                     </td>
                     <td style={{ padding: '12px 20px' }}>
                       <select
