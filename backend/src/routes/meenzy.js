@@ -353,6 +353,25 @@ router.delete('/meenzy/preorders/:id', async (req, res) => {
 });
 
 /**
+ * PUT /api/meenzy/preorders/:id/assign
+ * Assign a driver to a preorder.
+ */
+router.put('/meenzy/preorders/:id/assign', async (req, res) => {
+  const { id } = req.params;
+  const { driver_id } = req.body;
+  try {
+    const { rowCount } = await pool.query(
+      `UPDATE coexistence.meenzy_preorders SET driver_id = $1 WHERE id = $2`,
+      [driver_id || null, id]
+    );
+    res.json({ ok: true, updated: rowCount });
+  } catch (err) {
+    console.error('[meenzy-assign-preorder] Error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
  * POST /api/meenzy/inventory-failure
  * Triggered by procurement manager when an item fails inspection or is out of stock.
  * Sends Interactive buttons to all impacted customers.

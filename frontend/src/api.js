@@ -283,6 +283,7 @@ export const api = {
   },
   meenzy: {
     preorders: () => req('/meenzy/preorders'),
+    assignDriver: (id, driver_id) => req(`/meenzy/preorders/${id}/assign`, { method: 'PUT', body: JSON.stringify({ driver_id }) }),
     triggerFailure: (ordered_item) => req('/meenzy/inventory-failure', { method: 'POST', body: JSON.stringify({ ordered_item }) }),
     triggerConfirm: (ordered_item) => req('/meenzy/inventory-confirm', { method: 'POST', body: JSON.stringify({ ordered_item }) }),
     delete: (id) => req(`/meenzy/preorders/${id}`, { method: 'DELETE' }),

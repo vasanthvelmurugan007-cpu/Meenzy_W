@@ -13,15 +13,20 @@ export default function PreordersPage() {
   const [activeTab, setActiveTab] = useState('preorders');
   const [quotePrices, setQuotePrices] = useState({});
 
+    const [agents, setAgents] = useState([]);
+  const [assigningId, setAssigningId] = useState(null);
+
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [preordersData, quotesData] = await Promise.all([
+      const [preordersData, quotesData, agentsData] = await Promise.all([
         api.meenzy.preorders(),
-        api.meenzy.bulkQuotes()
+        api.meenzy.bulkQuotes(),
+        api.agents.list()
       ]);
       setPreorders(preordersData);
       setBulkQuotes(quotesData);
+      setAgents(agentsData.filter(a => a.is_active));
       setError(null);
     } catch (err) {
       setError('Failed to fetch data.');
@@ -35,16 +40,30 @@ export default function PreordersPage() {
     fetchData();
   }, []);
 
+  const handleAssignAgent = async (orderId, agentId) => {
+    setAssigningId(orderId);
+    try {
+      await api.meenzy.assignDriver(orderId, agentId);
+      setPreorders(preorders.map(p => p.id === orderId ? { ...p, driver_id: agentId || null } : p));
+    } catch (err) {
+      alert('Failed to assign driver.');
+      console.error(err);
+    } finally {
+      setAssigningId(null);
+    }
+  };
+
   const exportToExcel = () => {
     if (preorders.length === 0) return;
-    const headers = ['Order ID', 'Customer Phone', 'Ordered Item', 'Quantity (kg)', 'Delivery Date', 'Order Status'];
+    const headers = ['Order ID', 'Customer Phone', 'Ordered Item', 'Quantity (kg)', 'Delivery Date', 'Order Status', 'Driver'];
     const rows = preorders.map(order => [
       order.id,
       `+${order.customer_phone}`,
       order.ordered_item,
       parseFloat(order.quantity),
       new Date(order.delivery_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }),
-      order.order_status
+      order.order_status,
+      agents.find(a => a.id === order.driver_id)?.name || 'Unassigned'
     ]);
     const csvContent = [
       headers.join(','),
@@ -295,6 +314,7 @@ export default function PreordersPage() {
                       <th style={{ padding: '12px 20px' }}>Quantity (kg)</th>
                       <th style={{ padding: '12px 20px' }}>Delivery Date</th>
                       <th style={{ padding: '12px 20px' }}>Order Status</th>
+                      <th style={{ padding: '12px 20px' }}>Assign Agent</th>
                       <th style={{ padding: '12px 20px', textAlign: 'center' }}>Actions</th>
                     </tr>
                   </thead>
@@ -315,6 +335,28 @@ export default function PreordersPage() {
                             <span style={{ display: 'inline-block', padding: '4px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600, background: status.bg, color: status.text }}>
                               {status.label}
                             </span>
+                          </td>
+                          <td style={{ padding: '14px 20px' }}>
+                            <select
+                              value={order.driver_id || ''}
+                              onChange={(e) => handleAssignAgent(order.id, e.target.value)}
+                              disabled={assigningId === order.id}
+                              style={{
+                                padding: '6px 10px',
+                                borderRadius: 6,
+                                border: '1px solid #CBD5E1',
+                                background: '#F8FAFC',
+                                fontSize: 12,
+                                color: '#334155',
+                                cursor: 'pointer',
+                                outline: 'none'
+                              }}
+                            >
+                              <option value="">Unassigned</option>
+                              {agents.map(a => (
+                                <option key={a.id} value={a.id}>{a.name}</option>
+                              ))}
+                            </select>
                           </td>
                           <td style={{ padding: '14px 20px', textAlign: 'center' }}>
                             <button

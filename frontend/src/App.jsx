@@ -27,10 +27,11 @@ import DemandForecastPage from './pages/DemandForecastPage.jsx';
 import DashboardPage from './pages/DashboardPage.jsx';
 import SmartCampaignsPage from './pages/SmartCampaignsPage.jsx';
 import MarketingPage from './pages/MarketingPage.jsx';
+import SentimentPage from './pages/SentimentPage.jsx';
 
 const VALID_PAGES = new Set([
   'home', 'dashboard', 'smart-campaigns', 'chatbot-builder', 'template-builder', 'chats',
-  'contacts', 'preorders', 'refunds', 'pipelines', 'bulk-message', 'admin-settings', 'media-library', 'catalog', 'deliveries', 'track', 'agents', 'agent-portal', 'batch-agent', 'demand-forecast', 'marketing'
+  'contacts', 'preorders', 'refunds', 'pipelines', 'bulk-message', 'admin-settings', 'media-library', 'catalog', 'deliveries', 'track', 'agents', 'agent-portal', 'batch-agent', 'demand-forecast', 'marketing', 'sentiment'
 ]);
 
 export default function App() {
