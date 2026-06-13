@@ -1,0 +1,61 @@
+services:
+  # -------------------------
+  # 1. PostgreSQL Database
+  # -------------------------
+  - type: psql
+    name: meenzy-db
+    databaseName: meenzy
+    user: meenzy
+    plan: free
+
+  # -------------------------
+  # 2. Redis (for queues/cache)
+  # -------------------------
+  - type: redis
+    name: meenzy-redis
+    plan: free
+
+  # -------------------------
+  # 3. Backend (Node.js API)
+  # -------------------------
+  - type: web
+    name: meenzy-backend
+    env: node
+    rootDir: backend
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DATABASE_URL
+        fromDatabase:
+          name: meenzy-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: meenzy-redis
+          property: connectionString
+
+  # -------------------------
+  # 4. Frontend (Static Site)
+  # -------------------------
+  - type: web
+    name: meenzy-frontend
+    env: static
+    rootDir: frontend
+    plan: free
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    routes:
+      # Proxy all /api requests to the backend service to avoid CORS issues
+      - type: rewrite
+        source: /api/*
+        destination: https://meenzy-backend.onrender.com/api/*
+      # Handle SPA routing (React Router)
+      - type: rewrite
+        source: /*
+        destination: /index.html
