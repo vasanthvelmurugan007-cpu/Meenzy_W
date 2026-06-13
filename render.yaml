@@ -1,13 +1,13 @@
-services:
+databases:
   # -------------------------
   # 1. PostgreSQL Database
   # -------------------------
-  - type: psql
-    name: meenzy-db
+  - name: meenzy-db
     databaseName: meenzy
     user: meenzy
     plan: free
 
+services:
   # -------------------------
   # 2. Redis (for queues/cache)
   # -------------------------
