@@ -507,16 +507,26 @@ router.post('/meenzy/inventory-confirm', async (req, res) => {
       const localId = await insertPendingRow({
         account,
         toNumber: customer_phone,
-        messageType: 'text',
+        messageType: 'interactive',
         messageBody: messageText,
       });
 
+      const interactivePayload = {
+        type: "button",
+        body: { text: messageText },
+        action: {
+          buttons: [
+            { type: "reply", reply: { id: `cancel_wix_order_${orderRes.rows.length > 0 ? orderRes.rows[0].id : 'PREORDER'}`, title: "Cancel Order ❌" } }
+          ]
+        }
+      };
+
       await enqueueSend({
-        kind: 'text',
+        kind: 'interactive',
         accountId: account.id,
         to: String(customer_phone).replace(/\D/g, ''),
         localMessageId: localId,
-        payload: { body: messageText },
+        payload: { interactive: interactivePayload },
       });
 
       alertCount++;

@@ -335,6 +335,11 @@ export default function PreordersPage() {
                             <span style={{ display: 'inline-block', padding: '4px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600, background: status.bg, color: status.text }}>
                               {status.label}
                             </span>
+                            {order.notes && (
+                              <div style={{ marginTop: 8, fontSize: 11, color: '#EF4444', fontStyle: 'italic', maxWidth: 150, wordWrap: 'break-word' }}>
+                                {order.notes}
+                              </div>
+                            )}
                           </td>
                           <td style={{ padding: '14px 20px' }}>
                             <select

@@ -7,11 +7,11 @@ async function handleOrderResolutionFlow(client, phone, account, btnId, insertPe
       const orderId = btnId.replace('cancel_wix_order_', '');
       const payload = {
         type: "button",
-        body: { text: `We're sorry to see you cancel Order #${orderId}! How would you like us to handle this?` },
+        body: { text: `We're sorry to see you cancel your order! How would you like us to handle this?` },
         action: {
           buttons: [
             { type: "reply", reply: { id: `resolution_refund_${orderId}`, title: "Refund 💸" } },
-            { type: "reply", reply: { id: `resolution_replace_${orderId}`, title: "Replace Item 🔄" } },
+            { type: "reply", reply: { id: `resolution_swap_${orderId}`, title: "Swap Fish 🐟" } },
             { type: "reply", reply: { id: `resolution_postpone_${orderId}`, title: "Postpone 🗓️" } }
           ]
         }
@@ -45,32 +45,73 @@ async function handleOrderResolutionFlow(client, phone, account, btnId, insertPe
       // Format: reason_refund_<orderId>_<reason>
       const parts = btnId.replace('reason_refund_', '').split('_');
       const orderId = parts[0];
+      const reason = parts[1];
       
-      await client.query(`UPDATE coexistence.ecosystem_orders SET status = 'CANCELLED_REFUND' WHERE id = $1`, [orderId]).catch(()=>null);
-      await client.query(`UPDATE coexistence.meenzy_preorders SET order_status = 'CANCELLED' WHERE customer_phone = $1`, [normalizedPhone]).catch(()=>null);
+      const humanReason = reason === 'mistake' ? 'Bought by mistake' : (reason === 'price' ? 'Found better price' : 'Delayed delivery');
+
+      if (orderId !== 'PREORDER') {
+        await client.query(`UPDATE coexistence.ecosystem_orders SET status = 'CANCELLED_REFUND', notes = COALESCE(notes, '') || '\nRefund Reason: ' || $2 WHERE id = $1`, [orderId, humanReason]).catch(()=>null);
+      }
+      await client.query(`UPDATE coexistence.meenzy_preorders SET order_status = 'CANCELLED', notes = COALESCE(notes, '') || '\nRefund Reason: ' || $2 WHERE customer_phone = $1`, [normalizedPhone, humanReason]).catch(()=>null);
       
-      const msg = `Your order #${orderId} has been cancelled. If you already paid, the refund will be initiated to your original payment method in 3-5 business days.`;
+      const msg = `Your order has been cancelled. If you already paid, the refund will be initiated to your original payment method in 3-5 business days.`;
       const localId = await insertPendingRow({ account, toNumber: normalizedPhone, messageType: 'text', messageBody: msg });
       await enqueueSend({ kind: 'text', accountId: account.id, to: normalizedPhone, localMessageId: localId, payload: { body: msg, previewUrl: false } });
       return;
     }
 
-    // 4. Replace Option Selected
-    if (btnId.startsWith('resolution_replace_')) {
-      const orderId = btnId.replace('resolution_replace_', '');
-      
-      await client.query(`UPDATE coexistence.ecosystem_orders SET status = 'PENDING_REPLACEMENT' WHERE id = $1`, [orderId]).catch(()=>null);
-      // Flag human needed
-      await client.query(`UPDATE coexistence.contacts SET tags = tags || '[{"id": 998, "name": "Human_Needed", "color": "#f59e0b"}]'::jsonb WHERE contact_number = $1`, [normalizedPhone]).catch(()=>null);
-      
-      const catalogUrl = 'https://www.meenzy.in';
-      const msg = `We've paused your order #${orderId}. A human agent will message you shortly to help you pick a replacement item! 🧑‍💼\n\nIn the meantime, feel free to browse our live catalog: ${catalogUrl}`;
-      const localId = await insertPendingRow({ account, toNumber: normalizedPhone, messageType: 'text', messageBody: msg });
-      await enqueueSend({ kind: 'text', accountId: account.id, to: normalizedPhone, localMessageId: localId, payload: { body: msg, previewUrl: true } });
+    // 4. Swap Fish Option Selected
+    if (btnId.startsWith('resolution_swap_')) {
+      const orderId = btnId.replace('resolution_swap_', '');
+      const payload = {
+        type: "list",
+        body: { text: "Which fish would you like to swap your order to?" },
+        action: {
+          button: "Select Fish",
+          sections: [
+            {
+              title: "Available Options",
+              rows: [
+                { id: `swap_fish_${orderId}_rohu`, title: "Rohu", description: "Fresh River Fish" },
+                { id: `swap_fish_${orderId}_seer`, title: "Seer Fish / Vanjaram", description: "Premium Sea Fish" },
+                { id: `swap_fish_${orderId}_pomfret`, title: "Pomfret", description: "Fresh White Pomfret" },
+                { id: `swap_fish_${orderId}_prawns`, title: "White Prawns", description: "Fresh Sea Prawns" }
+              ]
+            }
+          ]
+        }
+      };
+      const localId = await insertPendingRow({ account, toNumber: normalizedPhone, messageType: 'interactive', messageBody: 'Sent swap fish options' });
+      await enqueueSend({ kind: 'interactive', accountId: account.id, to: normalizedPhone, localMessageId: localId, payload: { interactive: payload } });
       return;
     }
 
-    // 5. Postpone Option Selected
+    // 5. Swap Fish Item Selected
+    if (btnId.startsWith('swap_fish_')) {
+      const parts = btnId.replace('swap_fish_', '').split('_');
+      const orderId = parts[0];
+      const fishCode = parts[1];
+      
+      let newFish = 'Unknown';
+      if (fishCode === 'rohu') newFish = 'Rohu';
+      if (fishCode === 'seer') newFish = 'Seer Fish / Vanjaram';
+      if (fishCode === 'pomfret') newFish = 'Pomfret';
+      if (fishCode === 'prawns') newFish = 'White Prawns / Iral';
+
+      // Update the DB
+      if (orderId !== 'PREORDER') {
+        await client.query(`UPDATE coexistence.ecosystem_orders SET status = 'SWAPPED' WHERE id = $1`, [orderId]).catch(()=>null);
+        await client.query(`UPDATE coexistence.ecosystem_order_items SET product_name = $1 WHERE order_id = $2`, [newFish, orderId]).catch(()=>null);
+      }
+      await client.query(`UPDATE coexistence.meenzy_preorders SET ordered_item = $1, order_status = 'SWAPPED' WHERE customer_phone = $2`, [newFish, normalizedPhone]).catch(()=>null);
+      
+      const msg = `✅ *Swap Successful!*\n\nWe have updated your order to *${newFish}*. Our team has been notified and we will deliver it shortly! 🐟`;
+      const localId = await insertPendingRow({ account, toNumber: normalizedPhone, messageType: 'text', messageBody: msg });
+      await enqueueSend({ kind: 'text', accountId: account.id, to: normalizedPhone, localMessageId: localId, payload: { body: msg, previewUrl: false } });
+      return;
+    }
+
+    // 6. Postpone Option Selected
     if (btnId.startsWith('resolution_postpone_')) {
       const orderId = btnId.replace('resolution_postpone_', '');
       const payload = {
@@ -89,16 +130,32 @@ async function handleOrderResolutionFlow(client, phone, account, btnId, insertPe
       return;
     }
 
-    // 6. Postpone Date Selected
+    // 7. Postpone Date Selected
     if (btnId.startsWith('postpone_date_')) {
       const parts = btnId.replace('postpone_date_', '').split('_');
       const orderId = parts[0];
       const timeFrame = parts[1];
       
-      await client.query(`UPDATE coexistence.ecosystem_orders SET status = 'POSTPONED' WHERE id = $1`, [orderId]).catch(()=>null);
-      await client.query(`UPDATE coexistence.meenzy_preorders SET order_status = 'POSTPONED' WHERE customer_phone = $1`, [normalizedPhone]).catch(()=>null);
+      const humanDate = timeFrame === 'tomorrow' ? 'Tomorrow' : (timeFrame === '2days' ? 'In 2 days' : 'Next Weekend');
 
-      const msg = `Perfect! Your order #${orderId} has been placed on hold and scheduled for delivery ${timeFrame === 'tomorrow' ? 'tomorrow' : timeFrame === '2days' ? 'in 2 days' : 'next weekend'}. We'll remind you before dispatching! 🚚`;
+      // Calculate actual SQL Date
+      const d = new Date();
+      if (timeFrame === 'tomorrow') d.setDate(d.getDate() + 1);
+      else if (timeFrame === '2days') d.setDate(d.getDate() + 2);
+      else if (timeFrame === 'weekend') {
+        // Move to next Saturday
+        const day = d.getDay();
+        const diff = day <= 5 ? 6 - day : 6;
+        d.setDate(d.getDate() + diff);
+      }
+      const sqlDate = d.toISOString().split('T')[0];
+
+      if (orderId !== 'PREORDER') {
+        await client.query(`UPDATE coexistence.ecosystem_orders SET status = 'POSTPONED', delivery_instructions = COALESCE(delivery_instructions, '') || '\nPostponed to: ' || $2 WHERE id = $1`, [orderId, humanDate]).catch(()=>null);
+      }
+      await client.query(`UPDATE coexistence.meenzy_preorders SET order_status = 'POSTPONED', delivery_date = $2 WHERE customer_phone = $1`, [normalizedPhone, sqlDate]).catch(()=>null);
+
+      const msg = `Perfect! Your order has been placed on hold and scheduled for delivery ${humanDate.toLowerCase()}. We'll remind you before dispatching! 🚚`;
       const localId = await insertPendingRow({ account, toNumber: normalizedPhone, messageType: 'text', messageBody: msg });
       await enqueueSend({ kind: 'text', accountId: account.id, to: normalizedPhone, localMessageId: localId, payload: { body: msg, previewUrl: false } });
       return;
