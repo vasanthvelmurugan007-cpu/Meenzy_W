@@ -47,8 +47,11 @@ services:
     name: meenzy-frontend
     runtime: static
     rootDir: frontend
-    buildCommand: npm install --legacy-peer-deps && npm run build
+    buildCommand: npm run build
     staticPublishPath: dist
+    envVars:
+      - key: NPM_CONFIG_LEGACY_PEER_DEPS
+        value: "true"
     routes:
       # Proxy all /api requests to the backend service to avoid CORS issues
       - type: rewrite
