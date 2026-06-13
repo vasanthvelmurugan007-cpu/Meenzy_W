@@ -20,7 +20,7 @@ services:
   # -------------------------
   - type: web
     name: meenzy-backend
-    env: node
+    runtime: node
     rootDir: backend
     plan: free
     buildCommand: npm install
@@ -47,7 +47,7 @@ services:
     name: meenzy-frontend
     runtime: static
     rootDir: frontend
-    buildCommand: npm install && npm run build
+    buildCommand: npm install --legacy-peer-deps && npm run build
     staticPublishPath: dist
     routes:
       # Proxy all /api requests to the backend service to avoid CORS issues
