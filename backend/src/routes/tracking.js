@@ -30,7 +30,7 @@ router.get('/:wixOrderId', async (req, res) => {
       FROM coexistence.ecosystem_orders o
       LEFT JOIN coexistence.ecosystem_order_items i ON o.id = i.order_id
       LEFT JOIN coexistence.delivery_agents a ON o.assigned_agent_id = a.id
-      WHERE o.wix_order_id = $1
+      WHERE (o.wix_order_id = $1 OR o.id::text = $1)
       GROUP BY o.id, a.id
     `, [wixOrderId]);
 

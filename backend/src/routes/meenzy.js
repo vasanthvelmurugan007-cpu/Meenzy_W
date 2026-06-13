@@ -498,14 +498,31 @@ router.post('/meenzy/inventory-confirm', async (req, res) => {
         SELECT o.id, o.wix_order_id, o.total_price 
         FROM coexistence.ecosystem_orders o
         JOIN coexistence.ecosystem_order_items i ON o.id = i.order_id
-        WHERE o.user_phone = $1 AND i.product_name ILIKE $2
+        WHERE RIGHT(regexp_replace(o.user_phone, '\\D', '', 'g'), 10) = RIGHT($1, 10) AND i.product_name ILIKE $2
         ORDER BY o.created_at DESC LIMIT 1
-      `, [String(customer_phone).replace(/\D/g, ''), `${ordered_item}%`]);
+      `, [String(customer_phone).replace(/\D/g, ''), `%${ordered_item}%`]);
 
       let messageText = `✅ Great news! Your preorder for *${ordered_item}* is secured from today's fresh catch! We will pack and deliver it to you shortly.`;
 
+      let o;
       if (orderRes.rows.length > 0) {
-        const o = orderRes.rows[0];
+        o = orderRes.rows[0];
+      } else {
+        // Customer never went to Wix checkout, but we still need tracking and OTP! Auto-create ecosystem order.
+        const stubOrderRes = await pool.query(`
+          INSERT INTO coexistence.ecosystem_orders (user_phone, total_price, status, address_line)
+          VALUES ($1, 0, 'CREATED', 'WhatsApp Order')
+          RETURNING id, id as wix_order_id, total_price
+        `, [String(customer_phone).replace(/\D/g, '')]);
+        o = stubOrderRes.rows[0];
+        
+        await pool.query(`
+          INSERT INTO coexistence.ecosystem_order_items (order_id, product_name, quantity, price)
+          VALUES ($1, $2, 1, 0)
+        `, [o.id, ordered_item]);
+      }
+
+      if (o) {
         const displayOrderId = o.wix_order_id || o.id;
         const trackingPhone = String(customer_phone).replace(/\D/g, '').slice(-4);
         const trackingLink = `${process.env.CORS_ORIGIN || 'https://www.meenzy.in'}/#/track/${o.id}?phone=${trackingPhone}`;
