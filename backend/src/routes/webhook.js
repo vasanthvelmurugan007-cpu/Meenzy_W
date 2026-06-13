@@ -720,7 +720,7 @@ router.post('/webhook/whatsapp', async (req, res) => {
         // MEENZY Delivery Agent: Live Location Tracking
         if (r.direction === 'incoming' && r.message_type === 'location' && r.latitude && r.longitude) {
           const updateAgentRes = await client.query(
-            `UPDATE coexistence.meenzy_delivery_agents
+            `UPDATE coexistence.delivery_agents
              SET driver_lat = $1, driver_lng = $2
              WHERE phone = $3
              RETURNING id, name`,
@@ -735,7 +735,7 @@ router.post('/webhook/whatsapp', async (req, res) => {
 
         // MEENZY Delivery Agent: Proof of Delivery (POD)
         if (r.direction === 'incoming' && r.message_type === 'image' && !r.__handled) {
-          const agentRes = await client.query(`SELECT id, name FROM coexistence.meenzy_delivery_agents WHERE phone = $1`, [r.contact_number]);
+          const agentRes = await client.query(`SELECT id, name FROM coexistence.delivery_agents WHERE phone = $1`, [r.contact_number]);
           if (agentRes.rows.length > 0) {
             const agentId = agentRes.rows[0].id;
             // Find oldest OUT_FOR_DELIVERY order for this agent
@@ -854,10 +854,30 @@ router.post('/webhook/whatsapp', async (req, res) => {
         }
 
         // MEENZY Custom Workflow Rule 4: Welcome & Menu Trigger on "Hi"
-        if (r.direction === 'incoming' && r.message_body) {
+        if (r.direction === 'incoming' && r.message_body && !r.__handled) {
           const trimmedBody = r.message_body.trim().toLowerCase();
           if (trimmedBody === 'hi' || trimmedBody === 'hello') {
-            console.log(`[meenzy-welcome] Inbound "hi" from customer: ${r.contact_number}`);
+            
+            // Check if sender is a Delivery Agent
+            const agentRes = await client.query('SELECT name FROM coexistence.delivery_agents WHERE RIGHT(REGEXP_REPLACE(phone, \'\\D\', \'\', \'g\'), 10) = RIGHT(REGEXP_REPLACE($1, \'\\D\', \'\', \'g\'), 10)', [r.contact_number]);
+            if (agentRes.rows.length > 0) {
+              const agentName = agentRes.rows[0].name;
+              console.log(`[delivery-agent] Intercepted "hi" from agent: ${agentName} (${r.contact_number})`);
+              
+              const { resolveAccount, insertPendingRow } = require('../services/messageSender');
+              const { enqueueSend } = require('../queue/sendQueue');
+              const { account, error } = await resolveAccount({});
+              if (!error && account) {
+                const portalUrl = `${process.env.CORS_ORIGIN || 'https://meenzy-frontend.onrender.com'}/#/agent-portal`;
+                const agentMsg = `Welcome back, ${agentName} 🚚!\n\nHere is your portal link to view and manage your assigned deliveries:\n🔗 ${portalUrl}\n\nDrive safe!`;
+                const localId = await insertPendingRow({ account, toNumber: r.contact_number, messageType: 'text', messageBody: agentMsg });
+                await enqueueSend({ kind: 'text', accountId: account.id, to: String(r.contact_number).replace(/\D/g, ''), localMessageId: localId, payload: { body: agentMsg, previewUrl: false } });
+              }
+              r.__handled = true;
+            }
+
+            if (!r.__handled) {
+              console.log(`[meenzy-welcome] Inbound "hi" from customer: ${r.contact_number}`);
             
             const { resolveAccount, insertPendingRow } = require('../services/messageSender');
             const { enqueueSend } = require('../queue/sendQueue');
