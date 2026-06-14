@@ -189,12 +189,9 @@ async function processCheckout(customerPhone, cartItems, catalogId) {
  */
 async function confirmOrder(orderId, trackingNumber = null) {
   try {
-    // 0. Ensure OTP column exists
-    await pool.query(`ALTER TABLE coexistence.meenzy_preorders ADD COLUMN IF NOT EXISTS otp VARCHAR(10)`).catch(() => {});
-
     // 1. Fetch preorder details
     const orderRes = await pool.query(
-      `SELECT customer_phone, ordered_item, quantity FROM coexistence.meenzy_preorders WHERE id = $1`,
+      `SELECT customer_phone, ordered_item, quantity, driver_id FROM coexistence.meenzy_preorders WHERE id = $1`,
       [orderId]
     );
     if (orderRes.rows.length === 0) {
@@ -202,24 +199,63 @@ async function confirmOrder(orderId, trackingNumber = null) {
     }
     const order = orderRes.rows[0];
     
-    // 2. Generate OTP and Update status to 'confirmed'
-    const otp = Math.floor(1000 + Math.random() * 9000).toString(); // 4-digit OTP
-    await pool.query(
-      `UPDATE coexistence.meenzy_preorders SET order_status = 'confirmed', otp = $2 WHERE id = $1`,
-      [orderId, otp]
-    );
-    
-    // 3. Fetch live Wix products to calculate the correct price
+    // 2. Fetch live Wix products to calculate the correct price
     const { fetchCatalogProducts } = require('./webhook');
     const wixProducts = await fetchCatalogProducts();
     const product = wixProducts.find(p => p.name === order.ordered_item);
     const price = product ? parseFloat(product.price || 0) : 0;
     const total = price * parseFloat(order.quantity);
+
+    // 3. Update meenzy_preorders status
+    await pool.query(
+      `UPDATE coexistence.meenzy_preorders SET order_status = 'confirmed' WHERE id = $1`,
+      [orderId]
+    );
+
+    // 4. Create or update ecosystem_orders so it appears in Deliveries
+    let ecosystemOrderId;
+    let wixOrderId;
+    const existingOrderRes = await pool.query(`
+      SELECT o.id, o.wix_order_id
+      FROM coexistence.ecosystem_orders o
+      JOIN coexistence.ecosystem_order_items i ON o.id = i.order_id
+      WHERE RIGHT(regexp_replace(o.user_phone, '\\D', '', 'g'), 10) = RIGHT($1, 10) AND i.product_name ILIKE $2
+      ORDER BY o.created_at DESC LIMIT 1
+    `, [String(order.customer_phone).replace(/\D/g, ''), `%${order.ordered_item}%`]);
+
+    if (existingOrderRes.rows.length > 0) {
+      ecosystemOrderId = existingOrderRes.rows[0].id;
+      wixOrderId = existingOrderRes.rows[0].wix_order_id || ecosystemOrderId;
+      // Update assigned agent if needed
+      if (order.driver_id) {
+        await pool.query(`UPDATE coexistence.ecosystem_orders SET assigned_agent_id = $1 WHERE id = $2`, [order.driver_id, ecosystemOrderId]);
+      }
+    } else {
+      const stubOrderRes = await pool.query(`
+        INSERT INTO coexistence.ecosystem_orders (user_phone, total_price, status, address_line, assigned_agent_id)
+        VALUES ($1, $2, 'CREATED', 'WhatsApp Preorder', $3)
+        RETURNING id, id as wix_order_id
+      `, [String(order.customer_phone).replace(/\D/g, ''), total, order.driver_id || null]);
+      
+      ecosystemOrderId = stubOrderRes.rows[0].id;
+      wixOrderId = stubOrderRes.rows[0].wix_order_id;
+      
+      await pool.query(`
+        INSERT INTO coexistence.ecosystem_order_items (order_id, product_name, quantity, price)
+        VALUES ($1, $2, $3, $4)
+      `, [ecosystemOrderId, order.ordered_item, order.quantity, price]);
+    }
+
+    // 5. Generate OTP and save to ecosystem_orders (tracking page uses this)
+    const otp = Math.floor(1000 + Math.random() * 9000).toString();
+    await pool.query(`UPDATE coexistence.ecosystem_orders SET delivery_otp = $1 WHERE id = $2`, [otp, ecosystemOrderId]);
+    // Also save backward compatible OTP to preorder
+    await pool.query(`UPDATE coexistence.meenzy_preorders SET otp = $1 WHERE id = $2`, [otp, orderId]);
     
     const receiptSummary = `${order.ordered_item} (${order.quantity} Kg) - ₹${price}/Kg | Total: ₹${total}`;
-    const trackingId = trackingNumber || `MZ-${Math.floor(100000 + Math.random() * 900000)}`;
+    const trackingId = trackingNumber || wixOrderId.split('-')[0].slice(0, 8);
     
-    // 4. Send Meta API template message
+    // 6. Send Meta API template message
     const account = await getSingleAccount();
     if (!account || !account.accessToken || !account.phoneNumberId) {
       throw new Error('Active WhatsApp account details not found.');
@@ -283,9 +319,9 @@ async function confirmOrder(orderId, trackingNumber = null) {
       ]
     );
 
-    // 5. Send Follow-up Text Message with OTP and Tracking Link
+    // 7. Send Follow-up Text Message with OTP and Tracking Link
     const trackingPhone = String(order.customer_phone).replace(/\D/g, '').slice(-4);
-    const trackingLink = `${process.env.CORS_ORIGIN || 'https://meenzy-frontend.onrender.com'}/#/track/${orderId}?phone=${trackingPhone}`;
+    const trackingLink = `${process.env.CORS_ORIGIN || 'https://meenzy-frontend.onrender.com'}/#/track/${ecosystemOrderId}?phone=${trackingPhone}`;
     const otpMsg = `🔒 *Your Delivery OTP:* ${otp}\n\n📍 *Track your order live here:*\n${trackingLink}\n\nPlease share this OTP with the delivery agent when they arrive!`;
     await sendMetaTextMessage(order.customer_phone, otpMsg);
     
