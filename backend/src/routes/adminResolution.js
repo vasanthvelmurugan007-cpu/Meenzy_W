@@ -232,7 +232,7 @@ router.put('/:id/status', async (req, res) => {
         if (orderRows.length > 0 && orderRows[0].user_phone) {
           const toPhone = String(orderRows[0].user_phone).replace(/\D/g, '');
           const trackingPhone = toPhone.slice(-4);
-          const trackingLink = `${process.env.CORS_ORIGIN}/#/track/${id}?phone=${trackingPhone}`;
+          const trackingLink = `${process.env.CORS_ORIGIN || 'https://meenzy-frontend.onrender.com'}/#/track/${id}?phone=${trackingPhone}`;
           const messageText = `🚚 *Order Dispatched!*\n\nYour Meenzy order is on the way!\n\n🔑 *Delivery OTP:* ${otp}\n_Please provide this 4-digit OTP to the delivery agent to receive your order._\n\n📍 *Track live:* ${trackingLink}`;
           
           const msgId = await insertPendingRow({

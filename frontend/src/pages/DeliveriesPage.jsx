@@ -280,7 +280,7 @@ export default function DeliveriesPage() {
                 style={{ fontFamily: FONT }}
               >
                 <div style={{ padding: 8, minWidth: 200 }}>
-                  <p style={{ fontWeight: 700, margin: '0 0 4px 0', fontSize: 13 }}>Order #{selectedOrder.wix_order_id}</p>
+                  <p style={{ fontWeight: 700, margin: '0 0 4px 0', fontSize: 13 }}>Order #{selectedOrder.wix_order_id || selectedOrder.id.split('-')[0].toUpperCase()}</p>
                   <p style={{ fontSize: 11, color: '#6b7280', margin: '0 0 12px 0' }}>{selectedOrder.address_line}</p>
                   
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -368,7 +368,7 @@ export default function DeliveriesPage() {
               }}>
                 <div style={{ flex: 1 }}>
                   <p style={{ fontWeight: 700, color: C.text, margin: '0 0 4px 0', fontSize: 15 }}>
-                    Order #{order.wix_order_id} <span style={{ fontSize: 13, fontWeight: 500, color: C.textSecondary, marginLeft: 8 }}>Phone: {order.user_phone}</span>
+                    Order #{order.wix_order_id || order.id.split('-')[0].toUpperCase()} <span style={{ fontSize: 13, fontWeight: 500, color: C.textSecondary, marginLeft: 8 }}>Phone: {order.user_phone}</span>
                   </p>
                   <p style={{ fontSize: 13, color: C.textSecondary, margin: '0 0 8px 0' }}>Address: {order.address_line}</p>
                   <div style={{ fontSize: 13, color: C.textSecondary }}>
@@ -438,7 +438,7 @@ export default function DeliveriesPage() {
                         style={{ cursor: 'pointer' }}
                       />
                     </td>
-                    <td style={{ padding: '12px 20px', fontWeight: 600 }}>{order.wix_order_id}</td>
+                    <td style={{ padding: '12px 20px', fontWeight: 600 }}>{order.wix_order_id || order.id.split('-')[0].toUpperCase()}</td>
                     <td style={{ padding: '12px 20px', fontWeight: 700, color: '#3b82f6' }}>{getPincode(order.address_line)}</td>
                     <td style={{ padding: '12px 20px' }}>
                       <select 
