@@ -3,6 +3,7 @@ const router = express.Router();
 const pool = require('../db');
 const jwt = require('jsonwebtoken');
 const { assertOrderTransition } = require('../engine/stateMachine');
+const { sendAdminErrorAlert } = require('../services/errorAlert');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'forgecrm-secret-key-123';
 
@@ -54,6 +55,7 @@ router.get('/:agentId/orders', verifyAgent, async (req, res) => {
     res.json({ ok: true, orders });
   } catch (err) {
     console.error('[AgentOrders] Fetch Error:', err.message);
+    sendAdminErrorAlert('Agent Portal: Fetch Assigned Orders Failure', err.message);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -98,6 +100,7 @@ router.get('/available-orders', verifyAgent, async (req, res) => {
     res.json({ ok: true, orders });
   } catch (err) {
     console.error('[AgentOrders] Available Fetch Error:', err.message);
+    sendAdminErrorAlert('Agent Portal: Fetch Available Orders Failure', err.message);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

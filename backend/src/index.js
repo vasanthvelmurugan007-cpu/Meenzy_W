@@ -159,11 +159,17 @@ app.use('/api/admin/marketing', authMiddleware, marketingRouter);
 app.use('/api/marketing', authMiddleware, require('./routes/flashSale'));
 app.use('/api/admin/forecasting', authMiddleware, forecastingRouter);
 
+const { sendAdminErrorAlert } = require('./services/errorAlert');
+
 // Error handler
 app.use((err, req, res, next) => {
   // Full error (with stack) in dev for debugging; message-only in production.
   if (process.env.NODE_ENV !== 'production') console.error('[Error]', err);
   else console.error('[Error]', err.message);
+  
+  // Send WhatsApp alert to Admin
+  sendAdminErrorAlert('Unhandled System Crash', err.message || 'Unknown server error');
+
   res.status(500).json({ error: 'Internal server error' });
 });
 
