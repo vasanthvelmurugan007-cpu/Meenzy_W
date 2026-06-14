@@ -47,7 +47,7 @@ export default function Sidebar({ activePage, onPageChange, collapsed, setCollap
       position: 'relative',
     }}>
       {/* Nav items */}
-      <div style={{ padding: collapsed ? '10px 8px' : '14px 10px', flex: 1 }}>
+      <div style={{ padding: collapsed ? '10px 8px' : '14px 10px', flex: 1, overflowY: 'auto' }}>
         {visibleItems.map(item => {
           const active = activePage === item.id;
           return (
