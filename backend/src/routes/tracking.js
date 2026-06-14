@@ -22,7 +22,7 @@ router.get('/:wixOrderId', async (req, res) => {
              COALESCE(
                json_agg(
                  json_build_object('product_name', i.product_name, 'quantity', i.quantity, 'price', i.price)
-               ) FILTER (WHERE i.id IS NOT NULL), '[]'
+               ) FILTER (WHERE i.id IS NOT NULL), '[]'::json
              ) as items,
              (SELECT json_build_object('status', j.status)
               FROM coexistence.ecosystem_delivery_jobs j

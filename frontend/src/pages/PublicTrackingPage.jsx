@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import Map, { Marker, NavigationControl } from 'react-map-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { Package, Navigation, Phone, CheckCircle, Clock, Check } from 'lucide-react';
+import { Package, Navigation, Phone, CheckCircle, Clock, Check, Map as MapIcon } from 'lucide-react';
 
 const FONT = "'Inter', sans-serif";
 
@@ -91,7 +91,7 @@ export default function PublicTrackingPage() {
           </Map>
         ) : (
           <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', color: '#6b7280', padding: 20, textAlign: 'center' }}>
-            <Map size={48} style={{ opacity: 0.2, marginBottom: 16 }} />
+            <MapIcon size={48} style={{ opacity: 0.2, marginBottom: 16 }} />
             <p style={{ margin: 0, fontWeight: 600 }}>Live Map Unavailable</p>
             <p style={{ margin: '8px 0 0 0', fontSize: 14 }}>We will show the live map once the driver is dispatched.</p>
           </div>
@@ -134,10 +134,10 @@ export default function PublicTrackingPage() {
         {orderData.agent && !isDelivered && (
           <div style={{ background: '#f9fafb', borderRadius: 12, padding: 16, marginBottom: 20, border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', gap: 16 }}>
             <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#d1d5db', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#4b5563', fontSize: 16 }}>
-              {orderData.agent.name.charAt(0)}
+              {(orderData.agent.name || 'A').charAt(0)}
             </div>
             <div style={{ flex: 1 }}>
-              <p style={{ margin: '0 0 2px 0', fontWeight: 700, fontSize: 15, color: '#1f2937' }}>{orderData.agent.name}</p>
+              <p style={{ margin: '0 0 2px 0', fontWeight: 700, fontSize: 15, color: '#1f2937' }}>{orderData.agent.name || 'Agent'}</p>
               <p style={{ margin: 0, fontSize: 12, color: '#6b7280' }}>{orderData.agent.vehicle || 'Delivery Partner'}</p>
             </div>
           </div>
