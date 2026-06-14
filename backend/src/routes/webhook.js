@@ -1139,14 +1139,26 @@ router.post('/webhook/whatsapp', async (req, res) => {
           // Temporary Pincode Capture
           if (/^\d{6}$/.test(trimmedBody)) {
              const pincode = trimmedBody;
-             const updateRes = await client.query(`
-               UPDATE coexistence.meenzy_preorders 
-               SET address_line = COALESCE(address_line, '') || ' Pincode: ' || $1 
-               WHERE customer_phone = $2 AND order_status IN ('PENDING_CHECKOUT', 'CREATED', 'CONFIRMED')
-               RETURNING id
-             `, [pincode, r.contact_number]);
+             let updatedCount = 0;
+             try {
+               const res1 = await client.query(`
+                 UPDATE coexistence.ecosystem_orders 
+                 SET address_line = COALESCE(address_line, '') || ' Pincode: ' || $1 
+                 WHERE user_phone = $2 AND status IN ('CREATED', 'CONFIRMED', 'PENDING_VERIFICATION')
+               `, [pincode, r.contact_number]);
+               updatedCount += res1.rowCount;
+               
+               const res2 = await client.query(`
+                 UPDATE coexistence.meenzy_preorders 
+                 SET address_line = COALESCE(address_line, '') || ' Pincode: ' || $1 
+                 WHERE customer_phone = $2 AND order_status IN ('PENDING_CHECKOUT', 'CREATED', 'CONFIRMED', 'PENDING_MARKET')
+               `, [pincode, r.contact_number]);
+               updatedCount += res2.rowCount;
+             } catch (e) {
+               console.error('[pincode-capture] Error:', e.message);
+             }
              
-             if (updateRes.rows.length > 0) {
+             if (updatedCount > 0) {
                const { resolveAccount, insertPendingRow } = require('../services/messageSender');
                const { enqueueSend } = require('../queue/sendQueue');
                const { account, error } = await resolveAccount({});
