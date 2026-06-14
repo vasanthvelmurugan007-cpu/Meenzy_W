@@ -65,7 +65,7 @@ export default function PublicTrackingPage() {
       <div style={{ background: '#fff', padding: '16px 20px', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <h1 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#1f2937' }}>Meenzy Fresh Catch</h1>
         <div style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', display: 'flex', alignItems: 'center', gap: 4 }}>
-          <Package size={14} /> Order #{orderData.id.slice(-6)}
+          <Package size={14} /> Order #{(orderData.id || orderId || '').slice(-6)}
         </div>
       </div>
 

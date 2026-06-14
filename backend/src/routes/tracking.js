@@ -53,7 +53,7 @@ router.get('/:wixOrderId', async (req, res) => {
     res.json({
       ok: true,
       order: {
-        id: order.wix_order_id,
+        id: order.wix_order_id || order.id,
         status: order.status,
         created_at: order.created_at,
         address: order.address_line,
