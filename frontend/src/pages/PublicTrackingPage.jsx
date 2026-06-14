@@ -59,8 +59,11 @@ export default function PublicTrackingPage() {
     { label: 'Delivered', completed: isDelivered }
   ];
 
+  const mapToken = import.meta.env.VITE_MAPBOX_TOKEN;
+  const canRenderMap = hasAgentLocation && mapToken;
+
   return (
-    <div style={{ fontFamily: FONT, background: '#f9fafb', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ fontFamily: FONT, background: '#f9fafb', height: '100vh', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
       {/* Header */}
       <div style={{ background: '#fff', padding: '16px 20px', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <h1 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#1f2937' }}>Meenzy Fresh Catch</h1>
@@ -71,7 +74,7 @@ export default function PublicTrackingPage() {
 
       {/* Map Section */}
       <div style={{ flex: 1, position: 'relative', background: '#e5e7eb', minHeight: 300 }}>
-        {hasAgentLocation ? (
+        {canRenderMap ? (
           <Map
             initialViewState={{
               longitude: parseFloat(orderData.agent.lng),
@@ -79,7 +82,7 @@ export default function PublicTrackingPage() {
               zoom: 14
             }}
             mapStyle={`mapbox://styles/mapbox/streets-v12`}
-            mapboxAccessToken={import.meta.env.VITE_MAPBOX_TOKEN}
+            mapboxAccessToken={mapToken}
           >
             <NavigationControl position="top-right" />
             
@@ -96,7 +99,9 @@ export default function PublicTrackingPage() {
           <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', color: '#6b7280', padding: 20, textAlign: 'center' }}>
             <MapIcon size={48} style={{ opacity: 0.2, marginBottom: 16 }} />
             <p style={{ margin: 0, fontWeight: 600 }}>Live Map Unavailable</p>
-            <p style={{ margin: '8px 0 0 0', fontSize: 14 }}>We will show the live map once the driver is dispatched.</p>
+            <p style={{ margin: '8px 0 0 0', fontSize: 14 }}>
+              {!mapToken ? "Map system is currently offline." : "We will show the live map once the driver is dispatched."}
+            </p>
           </div>
         )}
       </div>
