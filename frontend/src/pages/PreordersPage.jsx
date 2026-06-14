@@ -364,23 +364,44 @@ export default function PreordersPage() {
                             </select>
                           </td>
                           <td style={{ padding: '14px 20px', textAlign: 'center' }}>
-                            <button
-                              onClick={() => handleDeleteOrder(order.id)}
-                              style={{
-                                background: 'transparent',
-                                border: 'none',
-                                color: '#94A3B8',
-                                cursor: 'pointer',
-                                padding: 6,
-                                borderRadius: 6,
-                                transition: 'background 0.2s',
-                              }}
-                              onMouseEnter={e => e.currentTarget.style.background = '#FEF2F2'}
-                              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                              title="Delete Order"
-                            >
-                              <Trash2 size={15} />
-                            </button>
+                            <div style={{ display: 'flex', justifyContent: 'center', gap: 8 }}>
+                              {order.order_status !== 'confirmed' && (
+                                <button
+                                  onClick={async () => {
+                                    if (!window.confirm('Send WhatsApp confirmation and generate tracking link for this order?')) return;
+                                    try {
+                                      await api.meenzy.confirmOrder(order.id);
+                                      fetchData();
+                                    } catch(e) {
+                                      alert('Failed to confirm order');
+                                    }
+                                  }}
+                                  style={{ background: 'transparent', border: 'none', color: '#10B981', cursor: 'pointer', padding: 6, borderRadius: 6, transition: 'background 0.2s' }}
+                                  onMouseEnter={e => e.currentTarget.style.background = '#ECFDF5'}
+                                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                  title="Confirm Order & Send Tracking"
+                                >
+                                  <CheckCircle2 size={15} />
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleDeleteOrder(order.id)}
+                                style={{
+                                  background: 'transparent',
+                                  border: 'none',
+                                  color: '#94A3B8',
+                                  cursor: 'pointer',
+                                  padding: 6,
+                                  borderRadius: 6,
+                                  transition: 'background 0.2s',
+                                }}
+                                onMouseEnter={e => e.currentTarget.style.background = '#FEF2F2'}
+                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                title="Delete Order"
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
