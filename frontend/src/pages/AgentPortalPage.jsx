@@ -728,18 +728,34 @@ export default function AgentPortalPage() {
         </div>
 
         {orders.length > 1 && (
-          <button 
-            onClick={handleOptimizeRoute} 
-            disabled={optimizing}
-            style={{ 
-              width: '100%', padding: '14px 20px', background: 'linear-gradient(135deg, #8b5cf6, #3b82f6)', 
-              color: '#fff', border: 'none', borderRadius: 12, fontSize: 15, fontWeight: 700, 
-              cursor: optimizing ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', 
-              justifyContent: 'center', gap: 8, marginBottom: 24, boxShadow: '0 4px 10px rgba(59, 130, 246, 0.3)'
-            }}
-          >
-            <Sparkles size={18} /> {optimizing ? 'AI is analyzing route...' : 'Optimize Sequence with AI'}
-          </button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
+            <button 
+              onClick={handleOptimizeRoute} 
+              disabled={optimizing}
+              style={{ 
+                width: '100%', padding: '14px 20px', background: 'linear-gradient(135deg, #8b5cf6, #3b82f6)', 
+                color: '#fff', border: 'none', borderRadius: 12, fontSize: 15, fontWeight: 700, 
+                cursor: optimizing ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', 
+                justifyContent: 'center', gap: 8, boxShadow: '0 4px 10px rgba(59, 130, 246, 0.3)'
+              }}
+            >
+              <Sparkles size={18} /> {optimizing ? 'AI is analyzing route...' : 'Optimize Sequence with AI'}
+            </button>
+            
+            <a 
+              href={`https://www.google.com/maps/dir/?api=1${agentLocation ? `&origin=${agentLocation.lat},${agentLocation.lng}` : ''}&destination=${orders.length > 0 && orders[orders.length-1].lat ? `${orders[orders.length-1].lat},${orders[orders.length-1].lng}` : ''}&waypoints=${orders.slice(0, -1).filter(o => o.lat && o.lng).map(o => `${o.lat},${o.lng}`).join('|')}`}
+              target="_blank" 
+              rel="noreferrer"
+              style={{ 
+                width: '100%', padding: '14px 20px', background: '#10b981', textDecoration: 'none',
+                color: '#fff', border: 'none', borderRadius: 12, fontSize: 15, fontWeight: 700, 
+                cursor: 'pointer', display: 'flex', alignItems: 'center', 
+                justifyContent: 'center', gap: 8, boxShadow: '0 4px 10px rgba(16, 185, 129, 0.3)'
+              }}
+            >
+              <Navigation size={18} /> Start Driving (Multi-Stop Maps)
+            </a>
+          </div>
         )}
 
         {loading ? <p style={{ textAlign: 'center' }}>Loading orders...</p> : orders.length === 0 ? (
