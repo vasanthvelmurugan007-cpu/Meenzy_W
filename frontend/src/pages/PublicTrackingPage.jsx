@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
+
 import Map, { Marker, NavigationControl } from 'react-map-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { Package, Navigation, Phone, CheckCircle, Clock, Check, Map as MapIcon } from 'lucide-react';
@@ -7,8 +7,11 @@ import { Package, Navigation, Phone, CheckCircle, Clock, Check, Map as MapIcon }
 const FONT = "'Inter', sans-serif";
 
 export default function PublicTrackingPage() {
-  const { orderId } = useParams();
-  const [searchParams] = useSearchParams();
+  // Parse URL natively since we don't have a Router context
+  const hash = window.location.hash || '';
+  const orderIdMatch = hash.match(/^#\/track\/([^?]+)/);
+  const orderId = orderIdMatch ? orderIdMatch[1] : null;
+  const searchParams = new URLSearchParams(hash.split('?')[1] || '');
   const phoneVerification = searchParams.get('phone');
 
   const [orderData, setOrderData] = useState(null);
