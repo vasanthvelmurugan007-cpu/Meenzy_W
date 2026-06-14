@@ -330,30 +330,44 @@ export default function DeliveriesPage() {
           >
             <NavigationControl position="top-right" />
             
-            {/* Draw Unassigned Orders */}
-            {orders.filter(o => (o.status === 'CONFIRMED' || o.status === 'CREATED') && !o.assigned_agent_id && o.lat && o.lng && !isNaN(parseFloat(o.lat)) && !isNaN(parseFloat(o.lng))).map(order => (
+            {/* Draw All Map Orders */}
+            {orders.filter(o => o.lat && o.lng && !isNaN(parseFloat(o.lat)) && !isNaN(parseFloat(o.lng))).map(order => {
+              const isUnassigned = (order.status === 'CONFIRMED' || order.status === 'CREATED') && !order.assigned_agent_id;
+              const isDelivered = order.status === 'DELIVERED';
+              const isAssigned = !!order.assigned_agent_id && !isDelivered && order.status !== 'CANCELLED' && order.status !== 'DELIVERY_FAILED_DISPUTED';
+              const isIssue = order.status === 'DELIVERY_FAILED_DISPUTED' || order.status === 'CANCELLED';
+              
+              let bgColor = '#ef4444'; // Red (Unassigned)
+              if (selectedOrderIds.has(order.id)) bgColor = '#3b82f6'; // Blue (Selected)
+              else if (isDelivered) bgColor = '#10b981'; // Green
+              else if (isAssigned) bgColor = '#6366f1'; // Indigo
+              else if (isIssue) bgColor = '#f59e0b'; // Yellow
+              
+              return (
               <Marker key={order.id} longitude={parseFloat(order.lng)} latitude={parseFloat(order.lat)} anchor="bottom" onClick={e => { e.originalEvent.stopPropagation(); setSelectedOrder(order); }}>
-                <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                  <div style={{ 
-                    position: 'absolute', top: -8, right: -8, zIndex: 10, background: '#fff', borderRadius: '50%', padding: 2, display: 'flex', boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
-                  }}>
-                    <input 
-                      type="checkbox"
-                      checked={selectedOrderIds.has(order.id)}
-                      onChange={(e) => {
-                        e.stopPropagation();
-                        toggleOrderSelection(order.id);
-                      }}
-                      onClick={e => e.stopPropagation()}
-                      style={{ cursor: 'pointer', margin: 0, width: 14, height: 14 }}
-                    />
-                  </div>
-                  <div style={{ background: selectedOrderIds.has(order.id) ? '#3b82f6' : '#ef4444', color: '#fff', width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 5px rgba(0,0,0,0.3)', border: '2px solid #fff', cursor: 'pointer' }}>
-                    <Package size={14} />
+                <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', opacity: isDelivered ? 0.7 : 1 }}>
+                  {isUnassigned && (
+                    <div style={{ 
+                      position: 'absolute', top: -8, right: -8, zIndex: 10, background: '#fff', borderRadius: '50%', padding: 2, display: 'flex', boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+                    }}>
+                      <input 
+                        type="checkbox"
+                        checked={selectedOrderIds.has(order.id)}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          toggleOrderSelection(order.id);
+                        }}
+                        onClick={e => e.stopPropagation()}
+                        style={{ cursor: 'pointer', margin: 0, width: 14, height: 14 }}
+                      />
+                    </div>
+                  )}
+                  <div style={{ background: bgColor, color: '#fff', width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 5px rgba(0,0,0,0.3)', border: '2px solid #fff', cursor: 'pointer' }}>
+                    {isDelivered ? <CheckCircle size={14} /> : (isIssue ? <AlertTriangle size={14} /> : <Package size={14} />)}
                   </div>
                 </div>
               </Marker>
-            ))}
+            )})}
 
             {/* Popup for Selected Order */}
             {selectedOrder && (
@@ -367,9 +381,13 @@ export default function DeliveriesPage() {
               >
                 <div style={{ padding: 8, minWidth: 200 }}>
                   <p style={{ fontWeight: 700, margin: '0 0 4px 0', fontSize: 13 }}>Order #{selectedOrder.wix_order_id || String(selectedOrder.id).split('-')[0].toUpperCase()}</p>
-                  <p style={{ fontSize: 11, color: '#6b7280', margin: '0 0 12px 0' }}>{selectedOrder.address_line}</p>
-                  
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <p style={{ fontSize: 11, color: '#6b7280', margin: '0 0 8px 0' }}>{selectedOrder.address_line}</p>
+                  <p style={{ fontSize: 11, fontWeight: 600, color: '#374151', margin: '0 0 4px 0' }}>Status: {selectedOrder.status}</p>
+                  {selectedOrder.assigned_agent_id && (
+                    <p style={{ fontSize: 11, fontWeight: 600, color: '#374151', margin: '0 0 8px 0' }}>Agent: {getAgentName(selectedOrder.assigned_agent_id)}</p>
+                  )}
+                  {(!selectedOrder.assigned_agent_id && (selectedOrder.status === 'CONFIRMED' || selectedOrder.status === 'CREATED')) && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     <select
                       value={assignAgentId}
                       onChange={(e) => setAssignAgentId(e.target.value)}
@@ -389,6 +407,7 @@ export default function DeliveriesPage() {
                       Assign Driver
                     </button>
                   </div>
+                  )}
                 </div>
               </Popup>
             )}
