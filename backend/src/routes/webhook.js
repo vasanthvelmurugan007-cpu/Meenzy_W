@@ -1156,6 +1156,16 @@ router.post('/webhook/whatsapp', async (req, res) => {
                  await enqueueSend({ kind: 'text', accountId: account.id, to: String(r.contact_number).replace(/\D/g, ''), localMessageId: localId, payload: { body: text, previewUrl: false } });
                }
                r.__handled = true;
+             } else {
+               const { resolveAccount, insertPendingRow } = require('../services/messageSender');
+               const { enqueueSend } = require('../queue/sendQueue');
+               const { account, error } = await resolveAccount({});
+               if (!error && account) {
+                 const text = `📍 I see you entered a Pincode (${pincode}), but I don't see an active order to attach it to! Please place your order first (e.g., "1kg rohu").`;
+                 const localId = await insertPendingRow({ account, toNumber: r.contact_number, messageType: 'text', messageBody: text });
+                 await enqueueSend({ kind: 'text', accountId: account.id, to: String(r.contact_number).replace(/\D/g, ''), localMessageId: localId, payload: { body: text, previewUrl: false } });
+               }
+               r.__handled = true;
              }
           }
           
