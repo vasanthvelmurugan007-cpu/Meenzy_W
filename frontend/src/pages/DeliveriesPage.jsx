@@ -417,6 +417,7 @@ export default function DeliveriesPage() {
                 <th style={{ padding: '12px 20px', fontWeight: 600 }}>Status</th>
                 <th style={{ padding: '12px 20px', fontWeight: 600 }}>Agent</th>
                 <th style={{ padding: '12px 20px', fontWeight: 600 }}>Customer</th>
+                <th style={{ padding: '12px 20px', fontWeight: 600 }}>Items</th>
                 <th style={{ padding: '12px 20px', fontWeight: 600 }}>Value</th>
                 <th style={{ padding: '12px 20px', fontWeight: 600 }}>Date</th>
               </tr>
@@ -479,7 +480,19 @@ export default function DeliveriesPage() {
                         {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                       </select>
                     </td>
-                    <td style={{ padding: '12px 20px', color: C.textSecondary }}>{order.user_phone}</td>
+                    <td style={{ padding: '12px 20px', color: C.textSecondary }}>
+                      {order.customer_name ? (
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                          <span style={{ fontWeight: 600, color: C.text }}>{order.customer_name}</span>
+                          <span style={{ fontSize: 11 }}>{order.user_phone}</span>
+                        </div>
+                      ) : (
+                        order.user_phone
+                      )}
+                    </td>
+                    <td style={{ padding: '12px 20px', color: C.text }}>
+                      {order.items && order.items.length > 0 ? order.items.map(i => `${i.product_name} (${i.quantity}kg)`).join(', ') : '-'}
+                    </td>
                     <td style={{ padding: '12px 20px', fontWeight: 600 }}>₹{order.total_price}</td>
                     <td style={{ padding: '12px 20px', color: C.textMuted }}>{new Date(order.created_at).toLocaleString()}</td>
                   </tr>
