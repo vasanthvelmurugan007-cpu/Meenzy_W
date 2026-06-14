@@ -1175,13 +1175,26 @@ router.post('/webhook/whatsapp', async (req, res) => {
                    itemsData.push({ id: po.id, name: po.ordered_item, qty: po.quantity, lineTotal });
                  }
                  
-                 // 3. Create the ecosystem_order
+                 // 3. Create the ecosystem_order with Geocoding for Mapbox
                  const addressStr = `WhatsApp Pincode: ${pincode}`;
+                 let lat = null, lng = null;
+                 try {
+                   const mapboxToken = 'pk.eyJ1IjoidmFzYW50aDAyMjMiLCJhIjoiY21xOGN4a2xnMDEwMjJwczl1MGhncHV1diJ9.NhbOSrL_XOGX6AUA3-wXQA';
+                   const geoRes = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${pincode}%20India.json?access_token=${mapboxToken}&limit=1`);
+                   const geoData = await geoRes.json();
+                   if (geoData.features && geoData.features.length > 0) {
+                     lng = geoData.features[0].center[0];
+                     lat = geoData.features[0].center[1];
+                   }
+                 } catch (geoErr) {
+                   console.error('[Geocode] Failed to fetch coordinates for pincode', pincode, geoErr.message);
+                 }
+
                  const { rows: ecoRows } = await client.query(`
-                   INSERT INTO coexistence.ecosystem_orders (user_phone, total_price, status, address_line)
-                   VALUES ($1, $2, 'CREATED', $3)
+                   INSERT INTO coexistence.ecosystem_orders (user_phone, total_price, status, address_line, lat, lng)
+                   VALUES ($1, $2, 'CREATED', $3, $4, $5)
                    RETURNING id
-                 `, [r.contact_number, totalPrice, addressStr]);
+                 `, [r.contact_number, totalPrice, addressStr, lat, lng]);
                  const ecoOrderId = ecoRows[0].id;
                  
                  // 4. Insert items
