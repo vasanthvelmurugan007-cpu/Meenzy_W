@@ -688,6 +688,7 @@ export default function AgentPortalPage() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
                   <div>
                     <h4 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: theme.text }}>Order #{selectedOrder.wix_order_id || selectedOrder.id.split('-')[0].toUpperCase()}</h4>
+                    {selectedOrder.customer_name && <p style={{ margin: '4px 0 0 0', fontSize: 14, fontWeight: 700, color: '#3b82f6' }}>{selectedOrder.customer_name}</p>}
                     <p style={{ margin: '4px 0 0 0', fontSize: 12, color: theme.subText, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{selectedOrder.address_line}</p>
                   </div>
                   <button onClick={() => setSelectedOrder(null)} style={{ background: theme.accentBg, border: 'none', width: 28, height: 28, borderRadius: '50%', cursor: 'pointer', color: theme.text, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
@@ -757,6 +758,7 @@ export default function AgentPortalPage() {
                       Stop {index + 1}
                     </span>
                     <h3 style={{ margin: '8px 0 4px 0', fontSize: 18, color: theme.text, fontWeight: 800 }}>Order #{order.wix_order_id || order.id.split('-')[0].toUpperCase()}</h3>
+                    {order.customer_name && <p style={{ margin: '0 0 4px 0', fontSize: 14, fontWeight: 700, color: '#3b82f6' }}>{order.customer_name}</p>}
                     <p style={{ margin: 0, color: theme.subText, fontSize: 13, display: 'flex', alignItems: 'center', gap: 4 }}>
                       <Clock size={14} /> {new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </p>
