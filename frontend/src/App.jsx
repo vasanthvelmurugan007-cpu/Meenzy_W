@@ -41,6 +41,14 @@ export default function App() {
   const [checking, setChecking] = useState(true);
   const [routeParts, navigate, replaceRoute] = useHashRoute();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const rawPage = routeParts[0] ? routeParts[0].split('?')[0] : '';
   const page = VALID_PAGES.has(rawPage) ? rawPage : 'home';
@@ -161,9 +169,9 @@ export default function App() {
       fontFamily: FONT,
       background: C.pageBg,
     }}>
-      <Topbar user={user} onLogout={handleLogout} onNavigate={setPage} />
+      <Topbar user={user} onLogout={handleLogout} onNavigate={setPage} isMobile={isMobile} mobileMenuOpen={mobileMenuOpen} setMobileMenuOpen={setMobileMenuOpen} />
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        {page !== 'admin-settings' && (
+        {page !== 'admin-settings' && !isMobile && (
           <Sidebar
             activePage={page}
             onPageChange={setPage}
@@ -171,6 +179,20 @@ export default function App() {
             setCollapsed={setSidebarCollapsed}
             user={user}
           />
+        )}
+        {page !== 'admin-settings' && isMobile && mobileMenuOpen && (
+          <>
+            <div onClick={() => setMobileMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 999, background: 'rgba(0,0,0,0.5)' }} />
+            <div style={{ position: 'fixed', top: 56, left: 0, bottom: 0, zIndex: 1000 }}>
+              <Sidebar
+                activePage={page}
+                onPageChange={(p) => { setPage(p); setMobileMenuOpen(false); }}
+                collapsed={false}
+                setCollapsed={() => {}}
+                user={user}
+              />
+            </div>
+          </>
         )}
         <div style={{ flex: 1, overflow: 'auto', background: C.pageBg, display: 'flex', flexDirection: 'column' }}>
           {renderPage()}

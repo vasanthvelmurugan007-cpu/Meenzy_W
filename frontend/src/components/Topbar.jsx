@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
-import { LogOut, User, Settings, AlertTriangle } from 'lucide-react';
+import { LogOut, User, Settings, AlertTriangle, Menu, X } from 'lucide-react';
 import { C, FONT } from '../constants.js';
 import { api } from '../api.js';
 
-export default function Topbar({ user, onLogout, onNavigate }) {
+export default function Topbar({ user, onLogout, onNavigate, isMobile, mobileMenuOpen, setMobileMenuOpen }) {
   const [userOpen, setUserOpen] = useState(false);
   const [unhealthyAccounts, setUnhealthyAccounts] = useState([]);
   const ref = useRef(null);
@@ -61,21 +61,29 @@ export default function Topbar({ user, onLogout, onNavigate }) {
       zIndex: 100,
       position: 'relative',
     }}>
+      {isMobile && (
+        <button
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '0 15px', display: 'flex', alignItems: 'center' }}
+        >
+          {mobileMenuOpen ? <X size={24} color={C.headerText} /> : <Menu size={24} color={C.headerText} />}
+        </button>
+      )}
       {/* Logo area — aligns with sidebar */}
       <button
         onClick={() => onNavigate('chats')}
         style={{
-          width: 224,
+          width: isMobile ? 'auto' : 224,
           flexShrink: 0,
           display: 'flex',
           alignItems: 'center',
-          paddingLeft: 15,
+          paddingLeft: isMobile ? 0 : 15,
           gap: 8,
-          borderRight: `1px solid ${C.headerBorder}`,
+          borderRight: isMobile ? 'none' : `1px solid ${C.headerBorder}`,
           height: '100%',
           background: 'transparent',
           border: 'none',
-          borderRightWidth: 1,
+          borderRightWidth: isMobile ? 0 : 1,
           borderRightStyle: 'solid',
           cursor: 'pointer',
           textAlign: 'left',

@@ -216,7 +216,7 @@ export default function AgentPortalPage() {
   // We no longer fetch a public list of agents.
   // 1. Session check on mount
   useEffect(() => {
-    if (agentToken && !selectedAgent) {
+    if (agentToken) {
       // Validate session and fetch profile
       api.agentAuth.me(agentToken)
         .then(res => {
@@ -227,7 +227,7 @@ export default function AgentPortalPage() {
           handleLogout();
         });
     }
-  }, [agentToken, selectedAgent]);
+  }, [agentToken]);
 
   // 2. Fetch Orders for Selected Agent (and poll)
   useEffect(() => {
@@ -254,6 +254,7 @@ export default function AgentPortalPage() {
       }
     } catch (err) {
       console.error('Failed to load stats', err);
+      if (err.message && err.message.includes('401')) handleLogout();
     }
   }
 
@@ -275,7 +276,7 @@ export default function AgentPortalPage() {
       }
       setOrders(newOrders);
     } catch (err) {
-      if (err.message.includes('Unauthorized')) handleLogout();
+      if (err.message.includes('Unauthorized') || err.message.includes('401')) handleLogout();
       else if (!silent) setError('Failed to load your orders.');
     } finally {
       if (!silent) setLoading(false);
