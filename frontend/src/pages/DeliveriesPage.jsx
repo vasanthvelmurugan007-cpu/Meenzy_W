@@ -63,7 +63,7 @@ const PINCODE_ZONES = {
 };
 
 const getZoneName = (pin) => {
-  return PINCODE_ZONES[pin] || \`99. Unmapped Zone (Pincode: \${pin})\`;
+  return PINCODE_ZONES[pin] || `99. Unmapped Zone (Pincode: ${pin})`;
 };
 
 export default function DeliveriesPage() {
