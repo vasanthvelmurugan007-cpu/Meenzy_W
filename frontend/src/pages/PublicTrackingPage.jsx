@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import Map, { Marker, NavigationControl } from 'react-map-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { Package, Navigation, Phone, CheckCircle, Clock } from 'lucide-react';
+import { Package, Navigation, Phone, CheckCircle, Clock, Check } from 'lucide-react';
 
 const FONT = "'Inter', sans-serif";
 
@@ -47,6 +47,14 @@ export default function PublicTrackingPage() {
 
   const isDelivered = orderData.status === 'DELIVERED';
   const hasAgentLocation = orderData.agent && orderData.agent.lat && orderData.agent.lng;
+
+  // Status mapping
+  const isOutForDelivery = ['DISPATCHED_TO_3PL', 'DELIVERED'].includes(orderData.status);
+  const steps = [
+    { label: 'Order Confirmed', completed: true },
+    { label: 'Out for Delivery', completed: isOutForDelivery },
+    { label: 'Delivered', completed: isDelivered }
+  ];
 
   return (
     <div style={{ fontFamily: FONT, background: '#f9fafb', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -103,6 +111,23 @@ export default function PublicTrackingPage() {
             <p style={{ margin: 0, fontSize: 13, color: '#6b7280' }}>
               {isDelivered ? 'Enjoy your fresh catch!' : orderData.status.replace(/_/g, ' ')}
             </p>
+          </div>
+        </div>
+
+        {/* Progress Timeline */}
+        <div style={{ margin: '0 0 24px 0', padding: '0 10px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', position: 'relative' }}>
+            <div style={{ position: 'absolute', top: 14, left: 20, right: 20, height: 4, background: '#e5e7eb', zIndex: 0, borderRadius: 2 }} />
+            <div style={{ position: 'absolute', top: 14, left: 20, width: isDelivered ? 'calc(100% - 40px)' : isOutForDelivery ? 'calc(50% - 20px)' : '0%', height: 4, background: '#10b981', zIndex: 1, borderRadius: 2, transition: 'width 0.5s ease' }} />
+            
+            {steps.map((step, idx) => (
+              <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 2, width: 80 }}>
+                <div style={{ width: 32, height: 32, borderRadius: '50%', background: step.completed ? '#10b981' : '#fff', border: step.completed ? '2px solid #10b981' : '2px solid #d1d5db', display: 'flex', alignItems: 'center', justifyContent: 'center', color: step.completed ? '#fff' : '#d1d5db', marginBottom: 8, transition: 'all 0.3s ease', boxShadow: step.completed ? '0 0 0 4px rgba(16, 185, 129, 0.1)' : 'none' }}>
+                  {step.completed ? <Check size={16} strokeWidth={3} /> : <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#d1d5db' }} />}
+                </div>
+                <span style={{ fontSize: 11, fontWeight: step.completed ? 700 : 500, color: step.completed ? '#1f2937' : '#9ca3af', textAlign: 'center', lineHeight: 1.2 }}>{step.label}</span>
+              </div>
+            ))}
           </div>
         </div>
 
