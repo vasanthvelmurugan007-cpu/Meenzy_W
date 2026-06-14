@@ -5,6 +5,67 @@ import Map, { Marker, NavigationControl, Popup } from 'react-map-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { C, FONT } from '../constants';
 
+const PINCODE_ZONES = {
+  // Chennai North
+  '600011': '1. Chennai North (Perambur, TVK Nagar)',
+  '600082': '1. Chennai North (Perambur, TVK Nagar)',
+  '600039': '1. Chennai North (Perambur, TVK Nagar)',
+  '600021': '1. Chennai North (Royapuram, Washermanpet)',
+  '600013': '1. Chennai North (Royapuram, Washermanpet)',
+  '600081': '1. Chennai North (Tondiarpet)',
+  '600019': '1. Chennai North (Thiruvottiyur)',
+  
+  // Chennai Central
+  '600001': '2. Chennai Central (Parrys, George Town)',
+  '600002': '2. Chennai Central (Mount Road)',
+  '600003': '2. Chennai Central (Park Town)',
+  '600004': '2. Chennai Central (Mylapore, Mandaveli)',
+  '600028': '2. Chennai Central (Mylapore, Mandaveli)',
+  '600005': '2. Chennai Central (Triplicane)',
+  '600006': '2. Chennai Central (Nungambakkam)',
+  '600008': '2. Chennai Central (Egmore)',
+  '600014': '2. Chennai Central (Royapettah)',
+  '600017': '2. Chennai Central (T. Nagar)',
+  '600018': '2. Chennai Central (Teynampet, Alwarpet)',
+  '600024': '2. Chennai Central (Kodambakkam)',
+  
+  // Chennai West
+  '600040': '3. Chennai West (Anna Nagar)',
+  '600102': '3. Chennai West (Anna Nagar West)',
+  '600030': '3. Chennai West (Shenoy Nagar)',
+  '600029': '3. Chennai West (Aminjikarai)',
+  '600026': '3. Chennai West (Vadapalani)',
+  '600078': '3. Chennai West (KK Nagar)',
+  '600083': '3. Chennai West (KK Nagar)',
+  '600092': '3. Chennai West (Virugambakkam)',
+  '600087': '3. Chennai West (Valasaravakkam)',
+  '600116': '3. Chennai West (Porur)',
+  
+  // Chennai South
+  '600020': '4. Chennai South (Adyar, Besant Nagar)',
+  '600090': '4. Chennai South (Adyar, Besant Nagar)',
+  '600032': '4. Chennai South (Guindy)',
+  '600041': '4. Chennai South (Thiruvanmiyur)',
+  '600042': '4. Chennai South (Velachery)',
+  '600088': '4. Chennai South (Madipakkam)',
+  '600091': '4. Chennai South (Madipakkam)',
+  '600061': '4. Chennai South (Nanganallur)',
+  
+  // OMR / ECR
+  '600096': '5. OMR (Perungudi)',
+  '600097': '5. OMR (Thoraipakkam)',
+  '600119': '5. OMR (Sholinganallur)',
+  '600115': '5. ECR (Neelankarai, Injambakkam)',
+  '600043': '5. ECR (Palavakkam)',
+  '600044': '5. Chennai Suburbs (Chromepet)',
+  '600045': '5. Chennai Suburbs (Tambaram)',
+  '600047': '5. Chennai Suburbs (Villivakkam)',
+};
+
+const getZoneName = (pin) => {
+  return PINCODE_ZONES[pin] || \`99. Unmapped Zone (Pincode: \${pin})\`;
+};
+
 export default function DeliveriesPage() {
   const [orders, setOrders] = useState([]);
   const [agents, setAgents] = useState([]);
@@ -198,13 +259,14 @@ export default function DeliveriesPage() {
     return agentA.localeCompare(agentB);
   });
 
-  const ordersByPincode = {};
+  const ordersByZone = {};
   sortedOrders.forEach(o => {
     const pin = getPincode(o.address_line);
-    if (!ordersByPincode[pin]) ordersByPincode[pin] = [];
-    ordersByPincode[pin].push(o);
+    const zone = getZoneName(pin);
+    if (!ordersByZone[zone]) ordersByZone[zone] = [];
+    ordersByZone[zone].push(o);
   });
-  const pincodes = Object.keys(ordersByPincode).sort();
+  const zones = Object.keys(ordersByZone).sort();
 
   const cardStyle = {
     background: C.cardBg, padding: 20, borderRadius: 12, border: `1px solid ${C.border}`, boxShadow: C.shadowSm, flex: 1
@@ -403,30 +465,31 @@ export default function DeliveriesPage() {
         </div>
       )}
 
-      {/* All Orders Table grouped by Pincode */}
+      {/* All Orders Table grouped by Zone */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-        {pincodes.length === 0 ? (
+        {zones.length === 0 ? (
           <div style={{ background: C.cardBg, padding: 30, textAlign: 'center', borderRadius: 12, border: `1px solid ${C.border}`, color: C.textMuted }}>
             {loading ? 'Loading deliveries...' : 'No orders found.'}
           </div>
         ) : (
-          pincodes.map(pin => {
-            const pinOrders = ordersByPincode[pin];
-            const unassignedOrders = pinOrders.filter(o => !o.assigned_agent_id && ['CREATED','CONFIRMED','VERIFIED_READY','PACKED'].includes(o.status));
+          zones.map(zone => {
+            const zoneOrders = ordersByZone[zone];
+            const unassignedOrders = zoneOrders.filter(o => !o.assigned_agent_id && ['CREATED','CONFIRMED','VERIFIED_READY','PACKED'].includes(o.status));
             const unassignedIds = unassignedOrders.map(o => o.id);
+            const zoneSafeId = zone.replace(/\W+/g, '-');
             
             return (
-              <div key={pin} style={{ background: C.cardBg, boxShadow: C.shadowSm, borderRadius: 12, border: `1px solid ${C.border}`, overflow: 'hidden' }}>
+              <div key={zone} style={{ background: C.cardBg, boxShadow: C.shadowSm, borderRadius: 12, border: `1px solid ${C.border}`, overflow: 'hidden' }}>
                 <div style={{ padding: '16px 20px', borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc' }}>
                   <h2 style={{ fontSize: 16, fontWeight: 700, color: '#3b82f6', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <MapPin size={18} /> Zone Pincode: {pin} <span style={{ fontSize: 12, color: C.textSecondary, fontWeight: 500 }}>({pinOrders.length} Orders, {unassignedOrders.length} Unassigned)</span>
+                    <MapPin size={18} /> {zone.replace(/^\d+\.\s*/, '')} <span style={{ fontSize: 12, color: C.textSecondary, fontWeight: 500 }}>({zoneOrders.length} Orders, {unassignedOrders.length} Unassigned)</span>
                   </h2>
                   
                   {unassignedOrders.length > 0 && (
                     <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                       <button 
                         onClick={async () => {
-                          if (!confirm(`Are you sure you want AI to automatically balance and assign these ${unassignedOrders.length} unassigned orders in zone ${pin}?`)) return;
+                          if (!confirm(`Are you sure you want AI to automatically balance and assign these ${unassignedOrders.length} unassigned orders in ${zone}?`)) return;
                           try {
                             const res = await api.deliveries.aiAssignZone(unassignedIds);
                             alert(`Success! AI Assigned ${res.assignedCount} orders to ${res.assignedAgentName}.`);
@@ -442,7 +505,7 @@ export default function DeliveriesPage() {
                       <div style={{ width: 1, height: 20, background: '#cbd5e1' }} />
                       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                         <select
-                          id={`select-${pin}`}
+                          id={`select-${zoneSafeId}`}
                           style={{ padding: '6px 8px', borderRadius: 4, border: '1px solid #d1d5db', fontSize: 12, outline: 'none' }}
                         >
                           <option value="">Manual Agent...</option>
@@ -452,10 +515,10 @@ export default function DeliveriesPage() {
                         </select>
                         <button 
                           onClick={async () => {
-                            const selectEl = document.getElementById(`select-${pin}`);
+                            const selectEl = document.getElementById(`select-${zoneSafeId}`);
                             const agentId = selectEl.value;
                             if (!agentId) { alert('Please select an agent first'); return; }
-                            if (!confirm(`Assign ${unassignedOrders.length} orders in zone ${pin} to this agent?`)) return;
+                            if (!confirm(`Assign ${unassignedOrders.length} orders in ${zone} to this agent?`)) return;
                             try {
                               const res = await api.deliveries.bulkAssign(agentId, unassignedIds);
                               alert(`Successfully assigned ${res.assignedCount} orders!`);
@@ -480,11 +543,11 @@ export default function DeliveriesPage() {
                         <th style={{ padding: '12px 20px', fontWeight: 600, width: 40 }}>
                           <input 
                             type="checkbox" 
-                            checked={pinOrders.length > 0 && pinOrders.every(o => selectedOrderIds.has(o.id))}
+                            checked={zoneOrders.length > 0 && zoneOrders.every(o => selectedOrderIds.has(o.id))}
                             onChange={() => {
                               const newSet = new Set(selectedOrderIds);
-                              const allChecked = pinOrders.every(o => newSet.has(o.id));
-                              pinOrders.forEach(o => allChecked ? newSet.delete(o.id) : newSet.add(o.id));
+                              const allChecked = zoneOrders.every(o => newSet.has(o.id));
+                              zoneOrders.forEach(o => allChecked ? newSet.delete(o.id) : newSet.add(o.id));
                               setSelectedOrderIds(newSet);
                             }}
                             style={{ cursor: 'pointer' }}
@@ -500,7 +563,7 @@ export default function DeliveriesPage() {
                       </tr>
                     </thead>
                     <tbody style={{ fontSize: 13, color: C.text }}>
-                      {pinOrders.map(order => (
+                      {zoneOrders.map(order => (
                         <tr key={order.id} style={{ borderBottom: `1px solid ${C.border}`, background: selectedOrderIds.has(order.id) ? '#eff6ff' : 'transparent' }}>
                           <td style={{ padding: '12px 20px' }}>
                             <input 
