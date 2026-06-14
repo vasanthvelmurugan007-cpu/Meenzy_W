@@ -89,8 +89,8 @@ async function triageWithLLM(messageText, preferences = null) {
 Message: "${messageText}"
 ${preferences ? `User Preferences: ${preferences}\n` : ''}Output ONLY the exact category name.`;
 
-    let textResult = 'GENERAL_FAQ';
-    if (apiKey.startsWith("sk-or-v1-")) {
+    let textResult = null;
+    if (apiKey && apiKey.startsWith("sk-or-v1-")) {
       const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -104,19 +104,42 @@ ${preferences ? `User Preferences: ${preferences}\n` : ''}Output ONLY the exact 
         })
       });
       const data = await response.json();
-      textResult = data?.choices?.[0]?.message?.content?.trim() || 'GENERAL_FAQ';
-    } else {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          "contents": [{ "parts": [{"text": prompt}] }]
-        })
-      });
-      const data = await response.json();
-      textResult = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || 'GENERAL_FAQ';
+      textResult = data?.choices?.[0]?.message?.content?.trim();
+    } else if (apiKey) {
+      try {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            "contents": [{ "parts": [{"text": prompt}] }]
+          })
+        });
+        const data = await response.json();
+        textResult = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+      } catch (e) {
+        console.error('[llm-triage] Gemini fetch error:', e.message);
+      }
     }
-    return textResult;
+
+    if (!textResult && process.env.GROQ_API_KEY) {
+      try {
+        const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${process.env.GROQ_API_KEY}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "llama-3.3-70b-versatile",
+            max_tokens: 100,
+            messages: [{ role: "user", content: prompt }]
+          })
+        });
+        const data = await response.json();
+        textResult = data?.choices?.[0]?.message?.content?.trim();
+      } catch (e) {
+        console.error('[llm-triage] Groq fallback error:', e.message);
+      }
+    }
+
+    return textResult || 'GENERAL_FAQ';
   } catch(e) {
     console.error('[llm-triage] Error:', e.message);
     return 'GENERAL_FAQ';
@@ -141,8 +164,8 @@ Never return empty items if any fish name is mentioned. Extract it even if it's 
 If no order is found at all, return {"items": [], "reply": ""}.
 ${preferences ? `Consider the user's saved preferences: ${preferences}\n` : ''}Output ONLY valid JSON. No markdown formatting.`;
 
-    let text = '{"items":[], "reply":""}';
-    if (apiKey.startsWith("sk-or-v1-")) {
+    let text = null;
+    if (apiKey && apiKey.startsWith("sk-or-v1-")) {
       const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -159,18 +182,45 @@ ${preferences ? `Consider the user's saved preferences: ${preferences}\n` : ''}O
         })
       });
       const data = await response.json();
-      text = data?.choices?.[0]?.message?.content?.trim() || '{"items":[], "reply":""}';
-    } else {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          "contents": [{ "parts": [{"text": "System Instructions:\n" + systemPrompt + "\n\nUser Message:\n" + messageText}] }]
-        })
-      });
-      const data = await response.json();
-      text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '{"items":[], "reply":""}';
+      text = data?.choices?.[0]?.message?.content?.trim();
+    } else if (apiKey) {
+      try {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            "contents": [{ "parts": [{"text": "System Instructions:\n" + systemPrompt + "\n\nUser Message:\n" + messageText}] }]
+          })
+        });
+        const data = await response.json();
+        text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+      } catch (e) {
+        console.error('[llm-intake] Gemini fetch error:', e.message);
+      }
     }
+
+    if (!text && process.env.GROQ_API_KEY) {
+      try {
+        const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${process.env.GROQ_API_KEY}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "llama-3.3-70b-versatile",
+            max_tokens: 1000,
+            messages: [
+              { role: "system", "content": systemPrompt },
+              { role: "user", "content": messageText }
+            ]
+          })
+        });
+        const data = await response.json();
+        text = data?.choices?.[0]?.message?.content?.trim();
+      } catch (e) {
+        console.error('[llm-intake] Groq fallback error:', e.message);
+      }
+    }
+    
+    text = text || '{"items":[], "reply":""}';
     
     if (text.startsWith('```json')) text = text.replace(/```json/g, '').replace(/```/g, '').trim();
     if (text.startsWith('```')) text = text.replace(/```/g, '').trim();
@@ -201,7 +251,7 @@ CRITICAL INSTRUCTION: You must reply in the EXACT SAME LANGUAGE the customer use
 Customer Message: "${messageText}"`;
 
     let text = null;
-    if (apiKey.startsWith("sk-or-v1-")) {
+    if (apiKey && apiKey.startsWith("sk-or-v1-")) {
       const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -218,16 +268,38 @@ Customer Message: "${messageText}"`;
       });
       const data = await response.json();
       text = data?.choices?.[0]?.message?.content?.trim();
-    } else {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          "contents": [{ "parts": [{"text": systemPrompt}] }]
-        })
-      });
-      const data = await response.json();
-      text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    } else if (apiKey) {
+      try {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            "contents": [{ "parts": [{"text": systemPrompt}] }]
+          })
+        });
+        const data = await response.json();
+        text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+      } catch (e) {
+        console.error('[llm-faq] Gemini fetch error:', e.message);
+      }
+    }
+
+    if (!text && process.env.GROQ_API_KEY) {
+      try {
+        const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${process.env.GROQ_API_KEY}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "llama-3.3-70b-versatile",
+            max_tokens: 500,
+            messages: [{ role: "system", "content": systemPrompt }]
+          })
+        });
+        const data = await response.json();
+        text = data?.choices?.[0]?.message?.content?.trim();
+      } catch (e) {
+        console.error('[llm-faq] Groq fallback error:', e.message);
+      }
     }
     return text;
   } catch(e) {
