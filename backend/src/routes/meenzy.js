@@ -285,7 +285,7 @@ async function confirmOrder(orderId, trackingNumber = null) {
 
     // 5. Send Follow-up Text Message with OTP and Tracking Link
     const trackingPhone = String(order.customer_phone).replace(/\D/g, '').slice(-4);
-    const trackingLink = `${process.env.CORS_ORIGIN || 'https://www.meenzy.in'}/#/track/${orderId}?phone=${trackingPhone}`;
+    const trackingLink = `${process.env.CORS_ORIGIN || 'https://meenzy-frontend.onrender.com'}/#/track/${orderId}?phone=${trackingPhone}`;
     const otpMsg = `🔒 *Your Delivery OTP:* ${otp}\n\n📍 *Track your order live here:*\n${trackingLink}\n\nPlease share this OTP with the delivery agent when they arrive!`;
     await sendMetaTextMessage(order.customer_phone, otpMsg);
     
@@ -525,7 +525,7 @@ router.post('/meenzy/inventory-confirm', async (req, res) => {
       if (o) {
         const displayOrderId = o.wix_order_id || o.id;
         const trackingPhone = String(customer_phone).replace(/\D/g, '').slice(-4);
-        const trackingLink = `${process.env.CORS_ORIGIN || 'https://www.meenzy.in'}/#/track/${o.id}?phone=${trackingPhone}`;
+        const trackingLink = `${process.env.CORS_ORIGIN || 'https://meenzy-frontend.onrender.com'}/#/track/${o.id}?phone=${trackingPhone}`;
         
         // Generate OTP and save to ecosystem_orders
         const otp = Math.floor(1000 + Math.random() * 9000).toString();

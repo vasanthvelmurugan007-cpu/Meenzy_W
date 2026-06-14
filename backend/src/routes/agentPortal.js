@@ -148,7 +148,7 @@ router.post('/:agentId/orders/:orderId/claim', verifyAgent, async (req, res) => 
       const { enqueueSend } = require('../queue/sendQueue');
       const toPhone = String(order.user_phone).replace(/\D/g, '');
       const trackingPhone = toPhone.slice(-4);
-      const trackingLink = `${process.env.CORS_ORIGIN}/#/track/${orderId}?phone=${trackingPhone}`;
+      const trackingLink = `${process.env.CORS_ORIGIN || 'https://meenzy-frontend.onrender.com'}/#/track/${orderId}?phone=${trackingPhone}`;
       const msg = `🛵 Your order is out for delivery!\n\nAgent is on the way. Provide this OTP to receive your package: *${finalOtp}*\n\nTrack order: ${trackingLink}`;
       await enqueueSend(account.id, toPhone, 'text', { text: msg }, `dispatch_${orderId}`);
     }
