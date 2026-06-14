@@ -333,8 +333,24 @@ export default function DeliveriesPage() {
             {/* Draw Unassigned Orders */}
             {orders.filter(o => (o.status === 'CONFIRMED' || o.status === 'CREATED') && !o.assigned_agent_id && o.lat && o.lng && !isNaN(parseFloat(o.lat)) && !isNaN(parseFloat(o.lng))).map(order => (
               <Marker key={order.id} longitude={parseFloat(order.lng)} latitude={parseFloat(order.lat)} anchor="bottom" onClick={e => { e.originalEvent.stopPropagation(); setSelectedOrder(order); }}>
-                <div style={{ background: '#ef4444', color: '#fff', width: 24, height: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 5px rgba(0,0,0,0.3)', border: '2px solid #fff', cursor: 'pointer' }}>
-                  <Package size={14} />
+                <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <div style={{ 
+                    position: 'absolute', top: -8, right: -8, zIndex: 10, background: '#fff', borderRadius: '50%', padding: 2, display: 'flex', boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+                  }}>
+                    <input 
+                      type="checkbox"
+                      checked={selectedOrderIds.has(order.id)}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        toggleOrderSelection(order.id);
+                      }}
+                      onClick={e => e.stopPropagation()}
+                      style={{ cursor: 'pointer', margin: 0, width: 14, height: 14 }}
+                    />
+                  </div>
+                  <div style={{ background: selectedOrderIds.has(order.id) ? '#3b82f6' : '#ef4444', color: '#fff', width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 5px rgba(0,0,0,0.3)', border: '2px solid #fff', cursor: 'pointer' }}>
+                    <Package size={14} />
+                  </div>
                 </div>
               </Marker>
             ))}
