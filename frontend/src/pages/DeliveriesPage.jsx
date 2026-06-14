@@ -187,8 +187,17 @@ export default function DeliveriesPage() {
     return agent ? agent.name : 'Z_Unknown';
   };
 
-  // Sort orders by Pincode first, then by Agent Name
+  const getDateString = (dateStr) => {
+    if (!dateStr) return 'Unknown Date';
+    return new Date(dateStr).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+
+  // Sort orders by Date first, then Pincode, then Agent
   const sortedOrders = [...orders].sort((a, b) => {
+    const dateA = new Date(a.created_at).setHours(0,0,0,0);
+    const dateB = new Date(b.created_at).setHours(0,0,0,0);
+    if (dateA !== dateB) return dateB - dateA;
+
     const pinA = getPincode(a.address_line);
     const pinB = getPincode(b.address_line);
     if (pinA !== pinB) return pinA.localeCompare(pinB);
@@ -198,13 +207,17 @@ export default function DeliveriesPage() {
     return agentA.localeCompare(agentB);
   });
 
-  const ordersByPincode = {};
+  const datesList = Array.from(new Set(sortedOrders.map(o => getDateString(o.created_at))));
+  const ordersByDate = {};
+  
   sortedOrders.forEach(o => {
+    const dStr = getDateString(o.created_at);
+    if (!ordersByDate[dStr]) ordersByDate[dStr] = {};
+    
     const pin = getPincode(o.address_line);
-    if (!ordersByPincode[pin]) ordersByPincode[pin] = [];
-    ordersByPincode[pin].push(o);
+    if (!ordersByDate[dStr][pin]) ordersByDate[dStr][pin] = [];
+    ordersByDate[dStr][pin].push(o);
   });
-  const pincodes = Object.keys(ordersByPincode).sort();
 
   const cardStyle = {
     background: C.cardBg, padding: 20, borderRadius: 12, border: `1px solid ${C.border}`, boxShadow: C.shadowSm, flex: 1
@@ -403,80 +416,85 @@ export default function DeliveriesPage() {
         </div>
       )}
 
-      {/* All Orders Table grouped by Pincode */}
+      {/* All Orders Table grouped by Date then Pincode */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-        {pincodes.length === 0 ? (
+        {datesList.length === 0 ? (
           <div style={{ background: C.cardBg, padding: 30, textAlign: 'center', borderRadius: 12, border: `1px solid ${C.border}`, color: C.textMuted }}>
             {loading ? 'Loading deliveries...' : 'No orders found.'}
           </div>
         ) : (
-          pincodes.map(pin => {
-            const pinOrders = ordersByPincode[pin];
-            const unassignedOrders = pinOrders.filter(o => !o.assigned_agent_id && ['CREATED','CONFIRMED','VERIFIED_READY','PACKED'].includes(o.status));
-            const unassignedIds = unassignedOrders.map(o => o.id);
-            
-            return (
-              <div key={pin} style={{ background: C.cardBg, boxShadow: C.shadowSm, borderRadius: 12, border: `1px solid ${C.border}`, overflow: 'hidden' }}>
-                <div style={{ padding: '16px 20px', borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc' }}>
-                  <h2 style={{ fontSize: 16, fontWeight: 700, color: '#3b82f6', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <MapPin size={18} /> Zone Pincode: {pin} <span style={{ fontSize: 12, color: C.textSecondary, fontWeight: 500 }}>({pinOrders.length} Orders, {unassignedOrders.length} Unassigned)</span>
-                  </h2>
-                  
-                  {unassignedOrders.length > 0 && (
-                    <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                      <button 
-                        onClick={async () => {
-                          if (!confirm(`Are you sure you want AI to automatically balance and assign these ${unassignedOrders.length} unassigned orders in zone ${pin}?`)) return;
-                          try {
-                            const res = await api.deliveries.aiAssignZone(unassignedIds);
-                            alert(`Success! AI Assigned ${res.assignedCount} orders to ${res.assignedAgentName}.`);
-                            fetchOrders();
-                          } catch (err) {
-                            alert('AI Assign Failed: ' + err.message);
-                          }
-                        }}
-                        style={{ padding: '6px 12px', background: 'linear-gradient(135deg, #8b5cf6, #3b82f6)', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6, boxShadow: '0 2px 4px rgba(59, 130, 246, 0.3)' }}
-                      >
-                        <Sparkles size={14} /> AI Assign Zone
-                      </button>
-                      <div style={{ width: 1, height: 20, background: '#cbd5e1' }} />
-                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                        <select
-                          id={`select-${pin}`}
-                          style={{ padding: '6px 8px', borderRadius: 4, border: '1px solid #d1d5db', fontSize: 12, outline: 'none' }}
-                        >
-                          <option value="">Manual Agent...</option>
-                          {agents.filter(a => a.is_active).map(a => (
-                            <option key={a.id} value={a.id}>{a.name}</option>
-                          ))}
-                        </select>
-                        <button 
-                          onClick={async () => {
-                            const selectEl = document.getElementById(`select-${pin}`);
-                            const agentId = selectEl.value;
-                            if (!agentId) { alert('Please select an agent first'); return; }
-                            if (!confirm(`Assign ${unassignedOrders.length} orders in zone ${pin} to this agent?`)) return;
-                            try {
-                              const res = await api.deliveries.bulkAssign(agentId, unassignedIds);
-                              alert(`Successfully assigned ${res.assignedCount} orders!`);
-                              selectEl.value = '';
-                              fetchOrders();
-                            } catch (err) {
-                              alert('Manual bulk assign failed: ' + err.message);
-                            }
-                          }}
-                          style={{ padding: '6px 12px', background: '#10b981', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
-                        >
-                          Assign
-                        </button>
-                      </div>
+          datesList.map(dStr => (
+            <div key={dStr} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <h2 style={{ fontSize: 20, fontWeight: 700, color: C.text, margin: '10px 0 0 0', display: 'flex', alignItems: 'center', gap: 8 }}>
+                 📅 Delivery Date: {dStr}
+              </h2>
+              {Object.keys(ordersByDate[dStr]).sort().map(pin => {
+                const pinOrders = ordersByDate[dStr][pin];
+                const unassignedOrders = pinOrders.filter(o => !o.assigned_agent_id && ['CREATED','CONFIRMED','VERIFIED_READY','PACKED'].includes(o.status));
+                const unassignedIds = unassignedOrders.map(o => o.id);
+                
+                return (
+                  <div key={`${dStr}-${pin}`} style={{ background: C.cardBg, boxShadow: C.shadowSm, borderRadius: 12, border: `1px solid ${C.border}`, overflow: 'hidden' }}>
+                    <div style={{ padding: '16px 20px', borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc' }}>
+                      <h3 style={{ fontSize: 16, fontWeight: 700, color: '#3b82f6', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <MapPin size={18} /> Zone Pincode: {pin} <span style={{ fontSize: 12, color: C.textSecondary, fontWeight: 500 }}>({pinOrders.length} Orders, {unassignedOrders.length} Unassigned)</span>
+                      </h3>
+                      
+                      {unassignedOrders.length > 0 && (
+                        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                          <button 
+                            onClick={async () => {
+                              if (!confirm(`Are you sure you want AI to automatically balance and assign these ${unassignedOrders.length} unassigned orders in zone ${pin} for ${dStr}?`)) return;
+                              try {
+                                const res = await api.deliveries.aiAssignZone(unassignedIds);
+                                alert(`Success! AI Assigned ${res.assignedCount} orders to ${res.assignedAgentName}.`);
+                                fetchOrders();
+                              } catch (err) {
+                                alert('AI Assign Failed: ' + err.message);
+                              }
+                            }}
+                            style={{ padding: '6px 12px', background: 'linear-gradient(135deg, #8b5cf6, #3b82f6)', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6, boxShadow: '0 2px 4px rgba(59, 130, 246, 0.3)' }}
+                          >
+                            <Sparkles size={14} /> AI Assign Zone
+                          </button>
+                          <div style={{ width: 1, height: 20, background: '#cbd5e1' }} />
+                          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                            <select
+                              id={`select-${dStr}-${pin}`}
+                              style={{ padding: '6px 8px', borderRadius: 4, border: '1px solid #d1d5db', fontSize: 12, outline: 'none' }}
+                            >
+                              <option value="">Manual Agent...</option>
+                              {agents.filter(a => a.is_active).map(a => (
+                                <option key={a.id} value={a.id}>{a.name}</option>
+                              ))}
+                            </select>
+                            <button 
+                              onClick={async () => {
+                                const selectEl = document.getElementById(`select-${dStr}-${pin}`);
+                                const agentId = selectEl.value;
+                                if (!agentId) { alert('Please select an agent first'); return; }
+                                if (!confirm(`Assign ${unassignedOrders.length} orders in zone ${pin} to this agent?`)) return;
+                                try {
+                                  const res = await api.deliveries.bulkAssign(agentId, unassignedIds);
+                                  alert(`Successfully assigned ${res.assignedCount} orders!`);
+                                  selectEl.value = '';
+                                  fetchOrders();
+                                } catch (err) {
+                                  alert('Manual bulk assign failed: ' + err.message);
+                                }
+                              }}
+                              style={{ padding: '6px 12px', background: '#10b981', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
+                            >
+                              Assign
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-                    <thead>
-                      <tr style={{ background: C.surfaceAlt, fontSize: 11, textTransform: 'uppercase', color: C.textMuted, borderBottom: `1px solid ${C.border}` }}>
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                        <thead>
+                          <tr style={{ background: C.surfaceAlt, fontSize: 11, textTransform: 'uppercase', color: C.textMuted, borderBottom: `1px solid ${C.border}` }}>
                         <th style={{ padding: '12px 20px', fontWeight: 600, width: 40 }}>
                           <input 
                             type="checkbox" 
@@ -563,19 +581,109 @@ export default function DeliveriesPage() {
                           </td>
                           <td style={{ padding: '12px 20px', color: C.text }}>
                             {order.items && order.items.length > 0 ? order.items.map(i => `${i.product_name} (${i.quantity}kg)`).join(', ') : '-'}
-                          </td>
-                          <td style={{ padding: '12px 20px', fontWeight: 600 }}>₹{order.total_price}</td>
-                          <td style={{ padding: '12px 20px', color: C.textMuted }}>{new Date(order.created_at).toLocaleString()}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            );
-          })
+                            <th style={{ padding: '12px 20px', fontWeight: 600, width: 40 }}>
+                              <input 
+                                type="checkbox" 
+                                checked={pinOrders.length > 0 && pinOrders.every(o => selectedOrderIds.has(o.id))}
+                                onChange={() => {
+                                  const newSet = new Set(selectedOrderIds);
+                                  const allChecked = pinOrders.every(o => newSet.has(o.id));
+                                  pinOrders.forEach(o => allChecked ? newSet.delete(o.id) : newSet.add(o.id));
+                                  setSelectedOrderIds(newSet);
+                                }}
+                                style={{ cursor: 'pointer' }}
+                              />
+                            </th>
+                            <th style={{ padding: '12px 20px', fontWeight: 600 }}>Order ID</th>
+                            <th style={{ padding: '12px 20px', fontWeight: 600 }}>Status</th>
+                            <th style={{ padding: '12px 20px', fontWeight: 600 }}>Agent</th>
+                            <th style={{ padding: '12px 20px', fontWeight: 600 }}>Customer</th>
+                            <th style={{ padding: '12px 20px', fontWeight: 600 }}>Items</th>
+                            <th style={{ padding: '12px 20px', fontWeight: 600 }}>Value</th>
+                            <th style={{ padding: '12px 20px', fontWeight: 600 }}>Date</th>
+                          </tr>
+                        </thead>
+                        <tbody style={{ fontSize: 13, color: C.text }}>
+                          {pinOrders.map(order => (
+                            <tr key={order.id} style={{ borderBottom: `1px solid ${C.border}`, background: selectedOrderIds.has(order.id) ? '#eff6ff' : 'transparent' }}>
+                              <td style={{ padding: '12px 20px' }}>
+                                <input 
+                                  type="checkbox" 
+                                  checked={selectedOrderIds.has(order.id)}
+                                  onChange={() => toggleOrderSelection(order.id)}
+                                  style={{ cursor: 'pointer' }}
+                                />
+                              </td>
+                              <td style={{ padding: '12px 20px', fontWeight: 600 }}>{order.wix_order_id || order.id.split('-')[0].toUpperCase()}</td>
+                              <td style={{ padding: '12px 20px' }}>
+                                <select 
+                                  value={order.status}
+                                  onChange={(e) => handleStatusUpdate(order.id, e.target.value)}
+                                  style={{ padding: '4px 8px', borderRadius: 6, fontSize: 12, border: '1px solid #d1d5db', background: '#f9fafb', cursor: 'pointer', outline: 'none', fontWeight: 600, color: '#374151' }}
+                                >
+                                  <option value="CREATED">Created</option>
+                                  <option value="PENDING_VERIFICATION">Pending Verification</option>
+                                  <option value="VERIFIED_READY">Verified Ready</option>
+                                  <option value="PACKED">Packed</option>
+                                  <option value="DISPATCHED_TO_3PL">Dispatched</option>
+                                  <option value="DELIVERED">Delivered</option>
+                                  <option value="DELIVERY_FAILED_DISPUTED">Disputed</option>
+                                  <option value="POSTPONED">Postponed</option>
+                                  <option value="CANCELLED_REFUND">Cancelled (Refund)</option>
+                                  <option value="PENDING_REPLACEMENT">Pending Replacement</option>
+                                  <option value="SWAPPED">Swapped</option>
+                                  <option value="CANCELLED">Cancelled</option>
+                                </select>
+                                {order.delivery_instructions && (
+                                  <div style={{ marginTop: 6, fontSize: 11, color: '#7C3AED', fontWeight: 600, whiteSpace: 'pre-wrap' }}>
+                                    {order.delivery_instructions}
+                                  </div>
+                                )}
+                                {order.notes && (
+                                  <div style={{ marginTop: 4, fontSize: 11, color: '#EF4444', fontStyle: 'italic', whiteSpace: 'pre-wrap' }}>
+                                    {order.notes}
+                                  </div>
+                                )}
+                              </td>
+                              <td style={{ padding: '12px 20px' }}>
+                                <select
+                                  value={order.assigned_agent_id || ''}
+                                  onChange={(e) => handleAssignAgent(order.id, e.target.value)}
+                                  style={{ padding: '4px 8px', borderRadius: 6, fontSize: 12, border: '1px solid #d1d5db', background: '#f9fafb', cursor: 'pointer', outline: 'none' }}
+                                >
+                                  <option value="">Unassigned</option>
+                                  {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                                </select>
+                              </td>
+                              <td style={{ padding: '12px 20px', color: C.textSecondary }}>
+                                {order.customer_name ? (
+                                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                    <span style={{ fontWeight: 600, color: C.text }}>{order.customer_name}</span>
+                                    <span style={{ fontSize: 11 }}>{order.user_phone}</span>
+                                  </div>
+                                ) : (
+                                  order.user_phone
+                                )}
+                              </td>
+                              <td style={{ padding: '12px 20px', color: C.text }}>
+                                {order.items && order.items.length > 0 ? order.items.map(i => `${i.product_name} (${i.quantity}kg)`).join(', ') : '-'}
+                              </td>
+                              <td style={{ padding: '12px 20px', fontWeight: 600 }}>₹{order.total_price}</td>
+                              <td style={{ padding: '12px 20px', color: C.textMuted }}>{new Date(order.created_at).toLocaleString()}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ))
         )}
       </div>
     </div>
   );
 }
+
+export default DeliveriesPage;
