@@ -73,6 +73,13 @@ async function ensureTables() {
       )
     `);
 
+    // Ensure meenzy_preorders has the address_line column
+    try {
+      await client.query(`ALTER TABLE coexistence.meenzy_preorders ADD COLUMN IF NOT EXISTS address_line TEXT`);
+    } catch (err) {
+      console.warn('[auth] meenzy_preorders table might not exist yet:', err.message);
+    }
+
     // Seed the first admin only when the users table is empty. The password
     // comes from ADMIN_PASSWORD; if that is unset we generate a random one and
     // print it once, so there is never a well-known default credential.
