@@ -892,7 +892,7 @@ router.post('/webhook/whatsapp', async (req, res) => {
                 const encodedCart = encodeURIComponent(base64Cart);
                 const checkoutUrl = `https://www.meenzy.in/cart-page?data=${encodedCart}&phone=${r.contact_number}`;
                 
-                const confText = `🐟 *Meenzy Preorder Initiated!* 🌊\n\nYour preorder for *${resolvedItem} (${qty} kg)* is almost ready!\n\nPlease click the link below to review your exact order details, see the price, and securely checkout on our website:\n${checkoutUrl}\n\nThank you! 🍽️`;
+                const confText = `🐟 *Meenzy Preorder Initiated!* 🌊\n\nYour preorder for *${resolvedItem} (${qty} kg)* is almost ready!\n\nPlease click the link below to review your exact order details, see the price, and securely checkout on our website:\n${checkoutUrl}\n\n📍 *Temporary:* Please reply to this message with your 6-digit delivery Pincode so we can assign your delivery zone correctly!\n\nThank you! 🍽️`;
                 const localId = await insertPendingRow({
                   account,
                   toNumber: r.contact_number,
@@ -1136,7 +1136,30 @@ router.post('/webhook/whatsapp', async (req, res) => {
         if (r.direction === 'incoming' && r.message_body && !r.__handled) {
           const trimmedBody = r.message_body.trim();
           
-          if (/^swap/i.test(trimmedBody)) {
+          // Temporary Pincode Capture
+          if (/^\d{6}$/.test(trimmedBody)) {
+             const pincode = trimmedBody;
+             const updateRes = await client.query(`
+               UPDATE coexistence.meenzy_preorders 
+               SET address_line = COALESCE(address_line, '') || ' Pincode: ' || $1 
+               WHERE customer_phone = $2 AND order_status IN ('PENDING_CHECKOUT', 'CREATED', 'CONFIRMED')
+               RETURNING id
+             `, [pincode, r.contact_number]);
+             
+             if (updateRes.rows.length > 0) {
+               const { resolveAccount, insertPendingRow } = require('../services/messageSender');
+               const { enqueueSend } = require('../queue/sendQueue');
+               const { account, error } = await resolveAccount({});
+               if (!error && account) {
+                 const text = `📍 Thanks! Your delivery Pincode (${pincode}) has been recorded.`;
+                 const localId = await insertPendingRow({ account, toNumber: r.contact_number, messageType: 'text', messageBody: text });
+                 await enqueueSend({ kind: 'text', accountId: account.id, to: String(r.contact_number).replace(/\D/g, ''), localMessageId: localId, payload: { body: text, previewUrl: false } });
+               }
+               r.__handled = true;
+             }
+          }
+          
+          if (!r.__handled && /^swap/i.test(trimmedBody)) {
             const swapTarget = trimmedBody.replace(/^swap\s+/i, '').trim().toLowerCase();
             
             let resolvedItem = null;
@@ -1262,7 +1285,7 @@ router.post('/webhook/whatsapp', async (req, res) => {
                       const encodedCart = encodeURIComponent(base64Cart);
                       const checkoutUrl = `https://www.meenzy.in/cart-page?data=${encodedCart}&phone=${r.contact_number}`;
 
-                      confMsg += `\nYour smart cart is ready! 🛒\n\nPlease click the link below to review your exact order details and securely checkout on our website:\n${checkoutUrl}\n\nThank you for choosing Meenzy Fresh Seafood! 🍽️`;
+                      confMsg += `\nYour smart cart is ready! 🛒\n\nPlease click the link below to review your exact order details and securely checkout on our website:\n${checkoutUrl}\n\n📍 *Temporary:* Please reply to this message with your 6-digit delivery Pincode so we can assign your delivery zone correctly!\n\nThank you for choosing Meenzy Fresh Seafood! 🍽️`;
                       
                       const crossSell = await generateCrossSellLLM(cartPayload);
                       if (crossSell) {
