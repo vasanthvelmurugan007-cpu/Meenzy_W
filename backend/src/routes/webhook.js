@@ -1140,14 +1140,21 @@ router.post('/webhook/whatsapp', async (req, res) => {
           if (/^\d{6}$/.test(trimmedBody)) {
              const pincode = trimmedBody;
              let updatedCount = 0;
+             
+             // Update ecosystem_orders
              try {
                const res1 = await client.query(`
                  UPDATE coexistence.ecosystem_orders 
                  SET address_line = COALESCE(address_line, '') || ' Pincode: ' || $1 
-                 WHERE user_phone = $2 AND status IN ('CREATED', 'CONFIRMED', 'PENDING_VERIFICATION')
+                 WHERE user_phone = $2 AND status::text IN ('CREATED', 'CONFIRMED', 'PENDING_VERIFICATION')
                `, [pincode, r.contact_number]);
                updatedCount += res1.rowCount;
+             } catch (e) {
+               console.error('[pincode-capture] Error updating ecosystem_orders:', e.message);
+             }
                
+             // Update meenzy_preorders
+             try {
                const res2 = await client.query(`
                  UPDATE coexistence.meenzy_preorders 
                  SET address_line = COALESCE(address_line, '') || ' Pincode: ' || $1 
@@ -1155,7 +1162,7 @@ router.post('/webhook/whatsapp', async (req, res) => {
                `, [pincode, r.contact_number]);
                updatedCount += res2.rowCount;
              } catch (e) {
-               console.error('[pincode-capture] Error:', e.message);
+               console.error('[pincode-capture] Error updating meenzy_preorders:', e.message);
              }
              
              if (updatedCount > 0) {
