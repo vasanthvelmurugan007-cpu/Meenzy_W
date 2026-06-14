@@ -309,6 +309,7 @@ export const api = {
     verifyDelivery: (id, otp) => req(`/admin/orders/${id}/verify-delivery`, { method: 'PUT', body: JSON.stringify({ otp }) }),
     assignAgent: (id, agentId) => req(`/admin/orders/${id}/assign`, { method: 'PUT', body: JSON.stringify({ agent_id: agentId }) }),
     bulkAssign: (agentId, orderIds) => req('/admin/orders/bulk-assign', { method: 'POST', body: JSON.stringify({ agentId, orderIds }) }),
+    aiAssignZone: (orderIds) => req('/admin/orders/ai-assign', { method: 'POST', body: JSON.stringify({ orderIds }) }),
   },
   agents: {
     list: () => req('/admin/agents'),

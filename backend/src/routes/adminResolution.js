@@ -87,6 +87,91 @@ router.post('/bulk-assign', async (req, res) => {
 });
 
 /**
+ * POST /api/admin/orders/ai-assign
+ * Body: { orderIds: ["uuid1", "uuid2"] }
+ * Automatically finds the least busy active agent and assigns the selected orders to them.
+ */
+router.post('/ai-assign', async (req, res) => {
+  const { orderIds } = req.body;
+  if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
+    return res.status(400).json({ error: 'Order IDs are required' });
+  }
+
+  try {
+    // 1. Find the active agent with the least active orders
+    const agentRes = await pool.query(`
+      SELECT a.id, a.name,
+             (SELECT COUNT(*) 
+              FROM coexistence.ecosystem_orders o 
+              WHERE o.assigned_agent_id = a.id 
+                AND o.status NOT IN ('DELIVERED', 'CANCELLED', 'DELIVERY_FAILED_DISPUTED')
+             ) as active_count
+      FROM coexistence.delivery_agents a
+      WHERE a.is_active = true
+      ORDER BY active_count ASC
+      LIMIT 1
+    `);
+
+    if (agentRes.rows.length === 0) {
+      return res.status(400).json({ error: 'No active delivery agents available' });
+    }
+
+    const agentId = agentRes.rows[0].id;
+    const agentName = agentRes.rows[0].name;
+
+    // 2. Assign the orders
+    const deliveryOtp = Math.floor(1000 + Math.random() * 9000).toString();
+    const result = await pool.query(`
+      UPDATE coexistence.ecosystem_orders 
+      SET assigned_agent_id = $1, status = 'DISPATCHED_TO_3PL', delivery_otp = $2, updated_at = NOW() 
+      WHERE id = ANY($3::uuid[])
+      RETURNING id, user_phone
+    `, [agentId, deliveryOtp, orderIds]);
+
+    if (result.rowCount > 0) {
+      const { resolveAccount, insertPendingRow } = require('../services/messageSender');
+      const { enqueueSend } = require('../queue/sendQueue');
+      const { account } = await resolveAccount({});
+      
+      if (account) {
+        // Send SMS to customers
+        for (const row of result.rows) {
+          if (row.user_phone) {
+             const toPhone = String(row.user_phone).replace(/\D/g, '');
+             const trackingPhone = toPhone.slice(-4);
+             const trackingLink = `${process.env.CORS_ORIGIN || 'https://meenzy-frontend.onrender.com'}/#/track/${row.id}?phone=${trackingPhone}`;
+             const msgText = \`🚚 *Out for Delivery!*\n\nYour Meenzy order #\${row.id.slice(0,6)} has been assigned to \${agentName} and is on its way!\n\n🔑 *Delivery OTP:* \${deliveryOtp}\n(Please share this code with the driver to receive your order)\n\n📍 *Track your order live:*\n\${trackingLink}\`;
+             
+             const localId = await insertPendingRow({
+               account, toNumber: toPhone, messageType: 'text', messageBody: 'Sent AI delivery assignment OTP'
+             });
+             await enqueueSend({
+               kind: 'text', accountId: account.id, to: toPhone, localMessageId: localId,
+               payload: { body: msgText, previewUrl: false }
+             });
+          }
+        }
+
+        // Send SMS to agent
+        const agentPhoneRes = await pool.query('SELECT phone FROM coexistence.delivery_agents WHERE id = $1', [agentId]);
+        if (agentPhoneRes.rows.length > 0 && agentPhoneRes.rows[0].phone) {
+          const agentPhone = String(agentPhoneRes.rows[0].phone).replace(/\D/g, '');
+          const portalUrl = \`\${process.env.CORS_ORIGIN || 'https://meenzy-frontend.onrender.com'}/#/agent-portal\`;
+          const agentMsg = \`🤖 *AI Dispatch Alert!*\n\nYou have been automatically assigned \${result.rowCount} new orders for a specific zone.\n\nPlease open your Agent Portal to view your routes:\n\${portalUrl}\`;
+          const agentLocalId = await insertPendingRow({ account, toNumber: agentPhone, messageType: 'text', messageBody: agentMsg });
+          await enqueueSend({ kind: 'text', accountId: account.id, to: agentPhone, localMessageId: agentLocalId, payload: { body: agentMsg, previewUrl: false } });
+        }
+      }
+    }
+
+    res.json({ success: true, assignedCount: result.rowCount, assignedAgentName: agentName });
+  } catch (err) {
+    console.error('AI bulk assign error:', err);
+    res.status(500).json({ error: 'Failed to AI bulk assign agent' });
+  }
+});
+
+/**
  * POST /api/admin/orders/:id/reattempt
  * Moves a disputed order back to VERIFIED_READY and clears failed jobs.
  */
