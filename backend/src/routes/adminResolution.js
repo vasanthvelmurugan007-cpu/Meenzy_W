@@ -140,7 +140,7 @@ router.post('/ai-assign', async (req, res) => {
              const toPhone = String(row.user_phone).replace(/\D/g, '');
              const trackingPhone = toPhone.slice(-4);
              const trackingLink = `${process.env.CORS_ORIGIN || 'https://meenzy-frontend.onrender.com'}/#/track/${row.id}?phone=${trackingPhone}`;
-             const msgText = \`🚚 *Out for Delivery!*\n\nYour Meenzy order #\${row.id.slice(0,6)} has been assigned to \${agentName} and is on its way!\n\n🔑 *Delivery OTP:* \${deliveryOtp}\n(Please share this code with the driver to receive your order)\n\n📍 *Track your order live:*\n\${trackingLink}\`;
+             const msgText = `🚚 *Out for Delivery!*\n\nYour Meenzy order #${row.id.slice(0,6)} has been assigned to ${agentName} and is on its way!\n\n🔑 *Delivery OTP:* ${deliveryOtp}\n(Please share this code with the driver to receive your order)\n\n📍 *Track your order live:*\n${trackingLink}`;
              
              const localId = await insertPendingRow({
                account, toNumber: toPhone, messageType: 'text', messageBody: 'Sent AI delivery assignment OTP'
@@ -156,8 +156,8 @@ router.post('/ai-assign', async (req, res) => {
         const agentPhoneRes = await pool.query('SELECT phone FROM coexistence.delivery_agents WHERE id = $1', [agentId]);
         if (agentPhoneRes.rows.length > 0 && agentPhoneRes.rows[0].phone) {
           const agentPhone = String(agentPhoneRes.rows[0].phone).replace(/\D/g, '');
-          const portalUrl = \`\${process.env.CORS_ORIGIN || 'https://meenzy-frontend.onrender.com'}/#/agent-portal\`;
-          const agentMsg = \`🤖 *AI Dispatch Alert!*\n\nYou have been automatically assigned \${result.rowCount} new orders for a specific zone.\n\nPlease open your Agent Portal to view your routes:\n\${portalUrl}\`;
+          const portalUrl = `${process.env.CORS_ORIGIN || 'https://meenzy-frontend.onrender.com'}/#/agent-portal`;
+          const agentMsg = `🤖 *AI Dispatch Alert!*\n\nYou have been automatically assigned ${result.rowCount} new orders for a specific zone.\n\nPlease open your Agent Portal to view your routes:\n${portalUrl}`;
           const agentLocalId = await insertPendingRow({ account, toNumber: agentPhone, messageType: 'text', messageBody: agentMsg });
           await enqueueSend({ kind: 'text', accountId: account.id, to: agentPhone, localMessageId: agentLocalId, payload: { body: agentMsg, previewUrl: false } });
         }
