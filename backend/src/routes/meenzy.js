@@ -625,6 +625,7 @@ router.get('/meenzy/refunds', async (req, res) => {
 /**
  * POST /api/meenzy/refunds/:id/status
  * Update refund status (e.g. COMPLETED or REJECTED)
+ * 1-Click Credit Note / Refund auto-messaging logic
  */
 router.post('/meenzy/refunds/:id/status', async (req, res) => {
   const { id } = req.params;
@@ -633,13 +634,42 @@ router.post('/meenzy/refunds/:id/status', async (req, res) => {
     return res.status(400).json({ error: 'refund_status is required' });
   }
   try {
-    const { rowCount } = await pool.query(
+    const { rows } = await pool.query(
       `UPDATE coexistence.meenzy_refunds
        SET refund_status = $1
-       WHERE id = $2`,
+       WHERE id = $2
+       RETURNING customer_phone, item_name, refund_amount`,
       [refund_status, id]
     );
-    res.json({ ok: true, updated: rowCount });
+    
+    if (rows.length > 0 && refund_status === 'COMPLETED') {
+      const refund = rows[0];
+      const { resolveAccount, insertPendingRow } = require('../services/messageSender');
+      const { enqueueSend } = require('../queue/sendQueue');
+      const { account } = await resolveAccount({});
+      
+      if (account && refund.customer_phone) {
+        const creditNoteCode = `CREDIT-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+        const msgText = `✅ *Refund Processed!*\n\nYour refund of *₹${refund.refund_amount}* for ${refund.item_name} has been processed successfully!\n\nUse this 1-Click Credit Note / Coupon Code on your next order: *${creditNoteCode}*\n\nThank you for choosing Meenzy! 🐟`;
+        
+        const localId = await insertPendingRow({
+          account,
+          toNumber: refund.customer_phone,
+          messageType: 'text',
+          messageBody: msgText,
+        });
+        
+        await enqueueSend({
+          kind: 'text',
+          accountId: account.id,
+          to: String(refund.customer_phone).replace(/\D/g, ''),
+          localMessageId: localId,
+          payload: { body: msgText, previewUrl: false },
+        });
+      }
+    }
+    
+    res.json({ ok: true, updated: rows.length });
   } catch (err) {
     console.error('[meenzy-update-refund] Error:', err.message);
     res.status(500).json({ error: 'Internal server error' });

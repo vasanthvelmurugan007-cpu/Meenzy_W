@@ -40,4 +40,42 @@ router.get('/demand', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/admin/forecasting/heatmap
+ * Generates GeoJSON data for predictive demand heatmap visualization.
+ */
+router.get('/heatmap', async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT 
+        lat, 
+        lng, 
+        COUNT(*) as weight 
+      FROM coexistence.ecosystem_orders
+      WHERE lat IS NOT NULL AND lng IS NOT NULL
+        AND created_at >= NOW() - INTERVAL '30 days'
+      GROUP BY lat, lng
+    `);
+
+    const features = rows.map(row => ({
+      type: 'Feature',
+      properties: { weight: parseInt(row.weight, 10) },
+      geometry: {
+        type: 'Point',
+        coordinates: [parseFloat(row.lng), parseFloat(row.lat)]
+      }
+    }));
+
+    const geojson = {
+      type: 'FeatureCollection',
+      features
+    };
+
+    res.json({ ok: true, data: geojson });
+  } catch (error) {
+    console.error('[forecasting-api] Error fetching heatmap:', error);
+    res.status(500).json({ ok: false, error: 'Failed to fetch heatmap data' });
+  }
+});
+
 module.exports = { router };

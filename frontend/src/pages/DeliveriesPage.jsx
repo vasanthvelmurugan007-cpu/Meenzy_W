@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../api';
 import { AlertTriangle, CheckCircle, Package, RefreshCw, XCircle, Clock, MapPin, Navigation, Sparkles } from 'lucide-react';
-import Map, { Marker, NavigationControl, Popup } from 'react-map-gl';
+import Map, { Marker, NavigationControl, Popup, Source, Layer } from 'react-map-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { C, FONT } from '../constants';
 
@@ -76,9 +76,14 @@ export default function DeliveriesPage() {
   const [bulkAssignAgentId, setBulkAssignAgentId] = useState('');
   const [selectedOrderIds, setSelectedOrderIds] = useState(new Set());
   
+  // AI Map State
+  const [showHeatmap, setShowHeatmap] = useState(false);
+  const [heatmapData, setHeatmapData] = useState(null);
+  const [isAiClustering, setIsAiClustering] = useState(false);
+  
   const [viewState, setViewState] = useState({
-    longitude: 77.5946,
-    latitude: 12.9716,
+    longitude: 80.2707,
+    latitude: 13.0827,
     zoom: 11
   });
 
@@ -223,6 +228,48 @@ export default function DeliveriesPage() {
     }
   }
 
+  async function toggleHeatmap() {
+    if (!showHeatmap) {
+      if (!heatmapData) {
+        try {
+          const res = await fetch(`${api.baseUrl}/admin/forecasting/heatmap`, {
+            headers: { 'Authorization': `Bearer ${api.token}` }
+          });
+          const json = await res.json();
+          if (json.ok) setHeatmapData(json.data);
+          else alert('Failed to load AI Heatmap');
+        } catch (e) {
+          console.error(e);
+          alert('Error loading heatmap');
+        }
+      }
+    }
+    setShowHeatmap(!showHeatmap);
+  }
+
+  async function handleAiDispatch() {
+    if (!confirm('Are you sure you want to let the AI automatically cluster and assign all unassigned orders to the nearest available agents?')) return;
+    setIsAiClustering(true);
+    try {
+      const res = await fetch(`${api.baseUrl}/admin/orders/ai-dispatch`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${api.token}` }
+      });
+      const json = await res.json();
+      if (json.ok) {
+        alert(`🤖 AI Auto-Dispatch Complete!\nSuccessfully clustered and assigned ${json.assignedCount} orders!`);
+        fetchOrders();
+      } else {
+        alert('AI Dispatch failed: ' + (json.error || 'Unknown error'));
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Error running AI Dispatch');
+    } finally {
+      setIsAiClustering(false);
+    }
+  }
+
   const getStatusBadge = (status) => {
     const baseStyle = { padding: '4px 8px', borderRadius: 12, fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 600 };
     switch (status) {
@@ -299,6 +346,22 @@ export default function DeliveriesPage() {
           
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: '#f3f4f6', padding: '6px 12px', borderRadius: 8, border: `1px solid ${C.border}` }}>
             <span style={{ fontSize: 13, fontWeight: 600, color: C.textSecondary }}>Bulk Assign:</span>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={handleAiDispatch}
+                disabled={isAiClustering}
+                style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 12px', background: 'linear-gradient(135deg, #6366f1, #a855f7)', color: '#fff', border: 'none', borderRadius: 4, cursor: isAiClustering ? 'wait' : 'pointer', fontSize: 12, fontWeight: 600, boxShadow: '0 2px 4px rgba(99,102,241,0.3)' }}
+              >
+                <Sparkles size={14} /> {isAiClustering ? 'Clustering...' : 'AI Auto-Dispatch'}
+              </button>
+              <button
+                onClick={toggleHeatmap}
+                style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 12px', background: showHeatmap ? '#ef4444' : '#f3f4f6', color: showHeatmap ? '#fff' : '#374151', border: showHeatmap ? 'none' : '1px solid #d1d5db', borderRadius: 4, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
+              >
+                {showHeatmap ? 'Hide Demand Heatmap' : 'Show Demand Heatmap'}
+              </button>
+            </div>
+            
             <select
               value={bulkAssignAgentId}
               onChange={(e) => setBulkAssignAgentId(e.target.value)}
@@ -324,14 +387,41 @@ export default function DeliveriesPage() {
             {...viewState}
             onLoad={e => e.target.resize()}
             onMove={evt => setViewState(evt.viewState)}
-            mapStyle={`mapbox://styles/mapbox/streets-v12`}
+            mapStyle={showHeatmap ? 'mapbox://styles/mapbox/dark-v11' : 'mapbox://styles/mapbox/streets-v12'}
             mapboxAccessToken={import.meta.env.VITE_MAPBOX_TOKEN}
             style={{ width: '100%', height: '100%' }}
           >
             <NavigationControl position="top-right" />
             
-            {/* Draw All Map Orders */}
-            {orders.filter(o => o.lat && o.lng && !isNaN(parseFloat(o.lat)) && !isNaN(parseFloat(o.lng))).map(order => {
+            {/* AI Heatmap Layer */}
+            {showHeatmap && heatmapData && (
+              <Source type="geojson" data={heatmapData}>
+                <Layer 
+                  id="demand-heatmap" 
+                  type="heatmap" 
+                  paint={{
+                    'heatmap-weight': ['interpolate', ['linear'], ['get', 'weight'], 0, 0, 10, 1],
+                    'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 0, 1, 15, 3],
+                    'heatmap-color': [
+                      'interpolate',
+                      ['linear'],
+                      ['heatmap-density'],
+                      0, 'rgba(33,102,172,0)',
+                      0.2, 'rgb(103,169,207)',
+                      0.4, 'rgb(209,229,240)',
+                      0.6, 'rgb(253,219,199)',
+                      0.8, 'rgb(239,138,98)',
+                      1, 'rgb(178,24,43)'
+                    ],
+                    'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 0, 2, 15, 20],
+                    'heatmap-opacity': 0.8
+                  }} 
+                />
+              </Source>
+            )}
+
+            {/* Draw All Map Orders (Hide if heatmap is showing for cleaner UI) */}
+            {!showHeatmap && orders.filter(o => o.lat && o.lng && !isNaN(parseFloat(o.lat)) && !isNaN(parseFloat(o.lng))).map(order => {
               const isUnassigned = (order.status === 'CONFIRMED' || order.status === 'CREATED') && !order.assigned_agent_id;
               const isDelivered = order.status === 'DELIVERED';
               const isAssigned = !!order.assigned_agent_id && !isDelivered && order.status !== 'CANCELLED' && order.status !== 'DELIVERY_FAILED_DISPUTED';

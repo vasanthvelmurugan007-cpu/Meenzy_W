@@ -9,12 +9,11 @@ function startAbandonmentCron() {
     console.log('[abandonment-cron] Running temporary cart abandonment check...');
     try {
       const { rows } = await pool.query(`
-        UPDATE coexistence.meenzy_carts
-        SET status = 'abandoned'
-        WHERE status = 'active' 
-          AND current_state != 'CHECKOUT'
+        UPDATE coexistence.meenzy_temporary_carts
+        SET current_step = 'abandoned'
+        WHERE current_step = 'ai_intake_complete' 
           AND updated_at < NOW() - INTERVAL '45 minutes'
-        RETURNING whatsapp_id, cart_items;
+        RETURNING whatsapp_id, cart_json as cart_items;
       `);
 
       if (rows.length === 0) return;

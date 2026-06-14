@@ -307,7 +307,6 @@ router.put('/:id/status', async (req, res) => {
       VALUES ($1, $2, $3, $4)
     `, [id, oldStatus, newStatus, 'Admin manually updated status via CRM']);
 
-    // Send WhatsApp notification if dispatched
     if (newStatus === 'DISPATCHED_TO_3PL' && otp) {
       const { resolveAccount, insertPendingRow } = require('../services/messageSender');
       const { enqueueSend } = require('../queue/sendQueue');
@@ -388,6 +387,47 @@ router.put('/:id/verify-delivery', async (req, res) => {
 
     await client.query('COMMIT');
     res.json({ ok: true, newStatus: 'DELIVERED' });
+
+    // Background Task: WhatsApp Feedback Request & Loyalty Coins
+    setTimeout(async () => {
+      try {
+        const { resolveAccount } = require('../services/messageSender');
+        const { account } = await resolveAccount({});
+        
+        // Refetch order to get phone number and total price
+        const { rows: orderRows } = await pool.query('SELECT user_phone, total_price FROM coexistence.ecosystem_orders WHERE id = $1', [id]);
+        if (orderRows.length > 0 && orderRows[0].user_phone && account) {
+          const { enqueueSend } = require('../queue/sendQueue');
+          const toPhone = String(orderRows[0].user_phone).replace(/\D/g, '');
+          
+          // Calculate Loyalty Coins (e.g. 5% of order value)
+          const orderTotal = parseFloat(orderRows[0].total_price) || 0;
+          const coinsEarned = Math.floor(orderTotal * 0.05);
+          
+          // Update customer's coin balance
+          let totalCoins = coinsEarned;
+          try {
+            const { rows: contactRows } = await pool.query(`
+              UPDATE coexistence.contacts 
+              SET meenzy_coins = COALESCE(meenzy_coins, 0) + $1 
+              WHERE RIGHT(regexp_replace(contact_number, '\\D', '', 'g'), 10) = RIGHT($2, 10)
+              RETURNING meenzy_coins
+            `, [coinsEarned, toPhone]);
+            if (contactRows.length > 0) {
+              totalCoins = contactRows[0].meenzy_coins;
+            }
+          } catch(e) {
+            console.error('[Loyalty] Failed to update coins:', e.message);
+          }
+
+          const msg = `🌟 How was your Meenzy delivery?\n\nYour order has been delivered! Please reply to this message with a rating from 1 to 5 stars (5 being the best) to help us improve our service!\n\n🪙 *Loyalty Alert:* You just earned *${coinsEarned} Meenzy Coins*! You now have a total of *${totalCoins} Coins* which you can redeem on your next catch! 🌊`;
+          await enqueueSend(account.id, toPhone, 'text', { text: msg }, `feedback_${id}`);
+          console.log(`[Feedback] Sent feedback & loyalty request to ${toPhone} for order ${id}`);
+        }
+      } catch (fbErr) {
+        console.error('[Feedback] Failed to send feedback request:', fbErr.message);
+      }
+    }, 60 * 1000); // 1 minute delay for testing
   } catch (err) {
     if (client) await client.query('ROLLBACK');
     res.status(400).json({ error: err.message });
@@ -396,7 +436,79 @@ router.put('/:id/verify-delivery', async (req, res) => {
   }
 });
 
-module.exports = { router };
+/**
+ * POST /api/admin/orders/ai-dispatch
+ * AI Auto-Clustering and Smart Dispatch
+ * Groups all unassigned orders and automatically assigns them to the nearest available agent based on real-time location.
+ */
+router.post('/ai-dispatch', async (req, res) => {
+  try {
+    // 1. Fetch unassigned orders
+    const { rows: orders } = await pool.query(`
+      SELECT id, lat, lng FROM coexistence.ecosystem_orders
+      WHERE assigned_agent_id IS NULL AND status IN ('CREATED', 'CONFIRMED', 'VERIFIED_READY', 'PACKED')
+    `);
+    
+    if (orders.length === 0) {
+      return res.json({ ok: true, assignedCount: 0, message: "No unassigned orders available." });
+    }
+
+    // 2. Fetch active agents with locations
+    const { rows: agents } = await pool.query(`
+      SELECT id, last_lat, last_lng FROM coexistence.delivery_agents
+      WHERE is_active = true
+    `);
+
+    if (agents.length === 0) {
+      return res.status(400).json({ ok: false, error: "No active delivery agents available." });
+    }
+
+    // 3. AI Smart Assignment Logic (Distance-based K-Means approximation)
+    let assignedCount = 0;
+    const updates = [];
+
+    for (const order of orders) {
+      let closestAgent = agents[0];
+      let minDistance = Infinity;
+      
+      const oLat = parseFloat(order.lat);
+      const oLng = parseFloat(order.lng);
+      
+      if (!isNaN(oLat) && !isNaN(oLng)) {
+        for (const agent of agents) {
+          const aLat = parseFloat(agent.last_lat || 13.0827); // Default to Chennai center
+          const aLng = parseFloat(agent.last_lng || 80.2707);
+          // Euclidean distance is fine for city-level clustering
+          const distance = Math.pow(oLat - aLat, 2) + Math.pow(oLng - aLng, 2);
+          if (distance < minDistance) {
+            minDistance = distance;
+            closestAgent = agent;
+          }
+        }
+      } else {
+        // Fallback: Random or Round-Robin if no GPS
+        closestAgent = agents[Math.floor(Math.random() * agents.length)];
+      }
+
+      const otp = Math.floor(1000 + Math.random() * 9000).toString();
+      updates.push(
+        pool.query(`
+          UPDATE coexistence.ecosystem_orders 
+          SET assigned_agent_id = $1, status = 'DISPATCHED_TO_3PL', delivery_otp = $2, updated_at = NOW() 
+          WHERE id = $3
+        `, [closestAgent.id, otp, order.id])
+      );
+      assignedCount++;
+    }
+
+    await Promise.all(updates);
+
+    res.json({ ok: true, assignedCount });
+  } catch (error) {
+    console.error('[AI-Dispatch] Error:', error);
+    res.status(500).json({ ok: false, error: 'AI Dispatch Failed' });
+  }
+});
 
 /**
  * PUT /api/admin/orders/:id/assign
@@ -474,3 +586,5 @@ router.put('/:id/assign', async (req, res) => {
     if (client) client.release();
   }
 });
+
+module.exports = { router };

@@ -30,7 +30,7 @@ async function updateTemporaryCart(client, phone, item, quantity, step = 'buildi
 async function generateCrossSellLLM(cartItems) {
   try {
     const apiKey = process.env.OPENROUTER_API_KEY || process.env.GEMINI_API_KEY;
-    if (!apiKey || !cartItems || cartItems.length === 0) return null;
+    if ((!apiKey && !process.env.GROQ_API_KEY) || !cartItems || cartItems.length === 0) return null;
     
     const itemsList = cartItems.map(i => i.ordered_item || i.item).join(', ');
     const systemPrompt = `You are an expert seafood sales AI for Meenzy. 
@@ -44,20 +44,36 @@ Return your response STRICTLY as a JSON object with these keys:
 Output ONLY valid JSON. No markdown wrappers. Example: {"title": "Meenzy Special Fish Fry Masala", "price": 50, "message": "🔥 Complete your meal! Add our signature Meenzy Fish Fry Masala (₹50) to perfectly complement your fresh catch!"}`;
 
     let text = null;
-    if (apiKey.startsWith("sk-or-v1-")) {
+    if (apiKey && apiKey.startsWith("sk-or-v1-")) {
       const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST", headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({ model: "google/gemini-1.5-flash", max_tokens: 150, messages: [{ role: "system", content: systemPrompt }] })
       });
       const data = await response.json();
       text = data?.choices?.[0]?.message?.content?.trim();
-    } else {
+    } else if (apiKey) {
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ contents: [{ parts: [{ text: systemPrompt }] }] })
       });
       const data = await response.json();
       text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    }
+    
+    if (!text && process.env.GROQ_API_KEY) {
+      console.log('[ai-cross-sell] Falling back to Groq');
+      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${process.env.GROQ_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "llama-3.3-70b-versatile",
+          messages: [{ role: "system", content: systemPrompt }],
+          max_tokens: 150,
+          temperature: 0.5
+        })
+      });
+      const data = await response.json();
+      text = data?.choices?.[0]?.message?.content?.trim();
     }
     
     if (text) {

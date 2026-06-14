@@ -222,20 +222,41 @@ router.put('/:agentId/orders/:orderId/verify-delivery', verifyAgent, async (req,
     await client.query('COMMIT');
     res.json({ ok: true, newStatus: 'DELIVERED' });
 
-    // Background Task: 1-minute delayed WhatsApp Feedback Request
+    // Background Task: WhatsApp Feedback Request & Loyalty Coins
     setTimeout(async () => {
       try {
         const { resolveAccount } = require('../services/messageSender');
         const { account } = await resolveAccount({});
         
-        // Refetch order to get phone number
-        const { rows: orderRows } = await pool.query('SELECT user_phone FROM coexistence.ecosystem_orders WHERE id = $1', [orderId]);
+        // Refetch order to get phone number and total price
+        const { rows: orderRows } = await pool.query('SELECT user_phone, total_price FROM coexistence.ecosystem_orders WHERE id = $1', [orderId]);
         if (orderRows.length > 0 && orderRows[0].user_phone && account) {
           const { enqueueSend } = require('../queue/sendQueue');
           const toPhone = String(orderRows[0].user_phone).replace(/\D/g, '');
-          const msg = `🌟 How was your Meenzy delivery?\n\nYour order has been delivered! Please reply to this message with a rating from 1 to 5 stars (5 being the best) to help us improve our service!`;
+          
+          // Calculate Loyalty Coins (e.g. 5% of order value)
+          const orderTotal = parseFloat(orderRows[0].total_price) || 0;
+          const coinsEarned = Math.floor(orderTotal * 0.05);
+          
+          // Update customer's coin balance
+          let totalCoins = coinsEarned;
+          try {
+            const { rows: contactRows } = await pool.query(`
+              UPDATE coexistence.contacts 
+              SET meenzy_coins = COALESCE(meenzy_coins, 0) + $1 
+              WHERE RIGHT(regexp_replace(contact_number, '\\D', '', 'g'), 10) = RIGHT($2, 10)
+              RETURNING meenzy_coins
+            `, [coinsEarned, toPhone]);
+            if (contactRows.length > 0) {
+              totalCoins = contactRows[0].meenzy_coins;
+            }
+          } catch(e) {
+            console.error('[Loyalty] Failed to update coins:', e.message);
+          }
+
+          const msg = `🌟 How was your Meenzy delivery?\n\nYour order has been delivered! Please reply to this message with a rating from 1 to 5 stars (5 being the best) to help us improve our service!\n\n🪙 *Loyalty Alert:* You just earned *${coinsEarned} Meenzy Coins*! You now have a total of *${totalCoins} Coins* which you can redeem on your next catch! 🌊`;
           await enqueueSend(account.id, toPhone, 'text', { text: msg }, `feedback_${orderId}`);
-          console.log(`[Feedback] Sent feedback request to ${toPhone} for order ${orderId}`);
+          console.log(`[Feedback] Sent feedback & loyalty request to ${toPhone} for order ${orderId}`);
         }
       } catch (fbErr) {
         console.error('[Feedback] Failed to send feedback request:', fbErr.message);
