@@ -40,7 +40,7 @@ Instructions:
 
     let replyText = null;
 
-    if (apiKey.startsWith("sk-or-v1-")) {
+    if (apiKey && apiKey.startsWith("sk-or-v1-")) {
       const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -52,16 +52,39 @@ Instructions:
       });
       const data = await response.json();
       replyText = data?.choices?.[0]?.message?.content?.trim();
-    } else {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: systemPrompt }] }]
-        })
-      });
-      const data = await response.json();
-      replyText = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    } else if (apiKey) {
+      try {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: systemPrompt }] }]
+          })
+        });
+        const data = await response.json();
+        replyText = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+      } catch (e) {
+        console.error('[aiRecipeAssistant] Gemini fetch error:', e.message);
+      }
+    }
+
+    // Fallback to Groq if the main API failed or wasn't set correctly
+    if (!replyText && process.env.GROQ_API_KEY) {
+      try {
+        const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${process.env.GROQ_API_KEY}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "llama-3.3-70b-versatile",
+            max_tokens: 500,
+            messages: [{ role: "user", content: systemPrompt }]
+          })
+        });
+        const data = await response.json();
+        replyText = data?.choices?.[0]?.message?.content?.trim();
+      } catch (e) {
+        console.error('[aiRecipeAssistant] Groq fallback error:', e.message);
+      }
     }
 
     return replyText;
