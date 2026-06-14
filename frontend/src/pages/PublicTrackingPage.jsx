@@ -49,7 +49,7 @@ export default function PublicTrackingPage() {
   const hasAgentLocation = orderData.agent && orderData.agent.lat && orderData.agent.lng;
 
   // Status mapping
-  const isOutForDelivery = ['DISPATCHED_TO_3PL', 'DELIVERED'].includes(orderData.status);
+  const isOutForDelivery = ['DISPATCHED_TO_3PL', 'DELIVERED'].includes(orderData.status || '');
   const steps = [
     { label: 'Order Confirmed', completed: true },
     { label: 'Out for Delivery', completed: isOutForDelivery },
@@ -109,7 +109,7 @@ export default function PublicTrackingPage() {
               {isDelivered ? 'Order Delivered!' : 'Arriving Soon'}
             </h2>
             <p style={{ margin: 0, fontSize: 13, color: '#6b7280' }}>
-              {isDelivered ? 'Enjoy your fresh catch!' : orderData.status.replace(/_/g, ' ')}
+              {isDelivered ? 'Enjoy your fresh catch!' : (orderData.status || '').replace(/_/g, ' ')}
             </p>
           </div>
         </div>
@@ -154,7 +154,7 @@ export default function PublicTrackingPage() {
 
           <div style={{ background: '#f3f4f6', borderRadius: 8, padding: 12 }}>
             <h3 style={{ margin: '0 0 8px 0', fontSize: 12, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>Items</h3>
-            {orderData.items.map((item, idx) => (
+            {Array.isArray(orderData.items) && orderData.items.map((item, idx) => (
               <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#374151', marginBottom: 4 }}>
                 <span>{item.quantity}x {item.product_name}</span>
                 <span style={{ fontWeight: 600 }}>₹{item.price}</span>
