@@ -190,6 +190,7 @@ async function start() {
     await pool.query(`ALTER TABLE coexistence.ecosystem_orders ADD COLUMN IF NOT EXISTS notes TEXT;`);
     await pool.query(`ALTER TABLE coexistence.ecosystem_orders ADD COLUMN IF NOT EXISTS delivery_instructions TEXT;`);
     await pool.query(`ALTER TABLE coexistence.ecosystem_orders ADD COLUMN IF NOT EXISTS pod_image_url TEXT;`);
+    await pool.query(`ALTER TABLE coexistence.ecosystem_order_items ALTER COLUMN quantity TYPE NUMERIC(10,2);`);
     await pool.query(`ALTER TABLE coexistence.delivery_agents ADD COLUMN IF NOT EXISTS plain_pin VARCHAR(255);`);
   } catch(e) { console.error('Failed to add schema columns:', e); }
 
