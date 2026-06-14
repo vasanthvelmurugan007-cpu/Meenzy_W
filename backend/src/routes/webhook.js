@@ -77,7 +77,7 @@ Output ONLY valid JSON. No markdown wrappers. Example: {"title": "Meenzy Special
 async function triageWithLLM(messageText, preferences = null) {
   try {
     const apiKey = process.env.OPENROUTER_API_KEY || process.env.GEMINI_API_KEY;
-    if (!apiKey) return 'GENERAL_FAQ';
+    if (!apiKey && !process.env.GROQ_API_KEY) return 'GENERAL_FAQ';
     
     const prompt = `You are an AI assistant for Meenzy Fresh Seafood. Classify the user's intent into EXACTLY ONE of these categories:
 - PLACING_ORDER (User wants to buy something)
@@ -150,7 +150,7 @@ ${preferences ? `User Preferences: ${preferences}\n` : ''}Output ONLY the exact 
 async function extractOrderLLM(messageText, preferences = null) {
   try {
     const apiKey = process.env.OPENROUTER_API_KEY || process.env.GEMINI_API_KEY;
-    if (!apiKey) return [];
+    if (!apiKey && !process.env.GROQ_API_KEY) return [];
     
     // Admins can configure the master prompt via the AiAgentBuilderPage
     const systemPrompt = process.env.LLM_INTAKE_PROMPT || `You are an AI order intake agent for Meenzy Fresh Seafood. 
@@ -241,7 +241,7 @@ ${preferences ? `Consider the user's saved preferences: ${preferences}\n` : ''}O
 async function generateFAQResponseLLM(messageText) {
   try {
     const apiKey = process.env.OPENROUTER_API_KEY || process.env.GEMINI_API_KEY;
-    if (!apiKey) return null;
+    if (!apiKey && !process.env.GROQ_API_KEY) return null;
     
     const systemPrompt = `You are a friendly customer service AI for Meenzy Fresh Seafood.
 Your job is to answer general questions or delivery inquiries based on our business context.

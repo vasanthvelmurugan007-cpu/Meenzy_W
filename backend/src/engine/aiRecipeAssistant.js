@@ -6,7 +6,7 @@ const pool = require('../db');
 async function generateRecipeLLM(contactNumber, messageText) {
   try {
     const apiKey = process.env.OPENROUTER_API_KEY || process.env.GEMINI_API_KEY;
-    if (!apiKey) return null;
+    if (!apiKey && !process.env.GROQ_API_KEY) return null;
 
     // Fetch the latest order items for this customer
     const { rows: orderRows } = await pool.query(`
