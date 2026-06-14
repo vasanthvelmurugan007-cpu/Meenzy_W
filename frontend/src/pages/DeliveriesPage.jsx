@@ -184,7 +184,7 @@ export default function DeliveriesPage() {
   const getAgentName = (agentId) => {
     if (!agentId) return 'Z_Unassigned';
     const agent = agents.find(a => String(a.id) === String(agentId));
-    return agent ? agent.name : 'Z_Unknown';
+    return agent && agent.name ? String(agent.name) : 'Z_Unknown';
   };
 
   // Sort orders by Pincode first, then by Agent Name
@@ -269,7 +269,7 @@ export default function DeliveriesPage() {
             <NavigationControl position="top-right" />
             
             {/* Draw Unassigned Orders */}
-            {orders.filter(o => (o.status === 'CONFIRMED' || o.status === 'CREATED') && !o.assigned_agent_id && o.lat && o.lng).map(order => (
+            {orders.filter(o => (o.status === 'CONFIRMED' || o.status === 'CREATED') && !o.assigned_agent_id && o.lat && o.lng && !isNaN(parseFloat(o.lat)) && !isNaN(parseFloat(o.lng))).map(order => (
               <Marker key={order.id} longitude={parseFloat(order.lng)} latitude={parseFloat(order.lat)} anchor="bottom" onClick={e => { e.originalEvent.stopPropagation(); setSelectedOrder(order); }}>
                 <div style={{ background: '#ef4444', color: '#fff', width: 24, height: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 5px rgba(0,0,0,0.3)', border: '2px solid #fff', cursor: 'pointer' }}>
                   <Package size={14} />
@@ -288,7 +288,7 @@ export default function DeliveriesPage() {
                 style={{ fontFamily: FONT }}
               >
                 <div style={{ padding: 8, minWidth: 200 }}>
-                  <p style={{ fontWeight: 700, margin: '0 0 4px 0', fontSize: 13 }}>Order #{selectedOrder.wix_order_id || selectedOrder.id.split('-')[0].toUpperCase()}</p>
+                  <p style={{ fontWeight: 700, margin: '0 0 4px 0', fontSize: 13 }}>Order #{selectedOrder.wix_order_id || String(selectedOrder.id).split('-')[0].toUpperCase()}</p>
                   <p style={{ fontSize: 11, color: '#6b7280', margin: '0 0 12px 0' }}>{selectedOrder.address_line}</p>
                   
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -316,13 +316,13 @@ export default function DeliveriesPage() {
             )}
 
             {/* Draw Active Agents */}
-            {agents.filter(a => a.last_lat && a.last_lng).map(agent => {
+            {agents.filter(a => a.last_lat && a.last_lng && !isNaN(parseFloat(a.last_lat)) && !isNaN(parseFloat(a.last_lng))).map(agent => {
               const isActive = agent.last_location_update && (new Date() - new Date(agent.last_location_update) < 5 * 60 * 1000); // Updated in last 5 mins
               return (
                 <Marker key={agent.id} longitude={parseFloat(agent.last_lng)} latitude={parseFloat(agent.last_lat)} anchor="bottom">
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                     <div style={{ background: '#fff', color: '#374151', padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 700, boxShadow: '0 1px 3px rgba(0,0,0,0.2)', marginBottom: 2 }}>
-                      {agent.name.split(' ')[0]}
+                      {(agent.name || 'Agent').split(' ')[0]}
                     </div>
                     <div style={{ background: isActive ? '#10b981' : '#6b7280', color: '#fff', width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 5px rgba(0,0,0,0.3)', border: '2px solid #fff' }}>
                       <Navigation size={14} style={{ transform: 'rotate(45deg)' }} />
@@ -376,12 +376,12 @@ export default function DeliveriesPage() {
               }}>
                 <div style={{ flex: 1 }}>
                   <p style={{ fontWeight: 700, color: C.text, margin: '0 0 4px 0', fontSize: 15 }}>
-                    Order #{order.wix_order_id || order.id.split('-')[0].toUpperCase()} <span style={{ fontSize: 13, fontWeight: 500, color: C.textSecondary, marginLeft: 8 }}>Phone: {order.user_phone}</span>
+                    Order #{order.wix_order_id || String(order.id).split('-')[0].toUpperCase()} <span style={{ fontSize: 13, fontWeight: 500, color: C.textSecondary, marginLeft: 8 }}>Phone: {order.user_phone}</span>
                   </p>
                   <p style={{ fontSize: 13, color: C.textSecondary, margin: '0 0 8px 0' }}>Address: {order.address_line}</p>
                   <div style={{ fontSize: 13, color: C.textSecondary }}>
                     <span style={{ fontWeight: 600, color: C.text }}>Items: </span>
-                    {order.items.map(i => `${i.product_name} (x${i.quantity})`).join(', ')}
+                    {Array.isArray(order.items) && order.items.length > 0 ? order.items.map(i => `${i.product_name} (x${i.quantity})`).join(', ') : '-'}
                   </div>
                   {order.latest_job && (
                     <div style={{ marginTop: 8, fontSize: 12, color: '#dc2626', background: '#fef2f2', padding: '4px 8px', borderRadius: 4, display: 'inline-block' }}>
@@ -442,7 +442,7 @@ export default function DeliveriesPage() {
                       <div style={{ width: 1, height: 20, background: '#cbd5e1' }} />
                       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                         <select
-                          id={`select-${dStr}-${pin}`}
+                          id={`select-${pin}`}
                           style={{ padding: '6px 8px', borderRadius: 4, border: '1px solid #d1d5db', fontSize: 12, outline: 'none' }}
                         >
                           <option value="">Manual Agent...</option>
@@ -510,7 +510,7 @@ export default function DeliveriesPage() {
                               style={{ cursor: 'pointer' }}
                             />
                           </td>
-                          <td style={{ padding: '12px 20px', fontWeight: 600 }}>{order.wix_order_id || order.id.split('-')[0].toUpperCase()}</td>
+                          <td style={{ padding: '12px 20px', fontWeight: 600 }}>{order.wix_order_id || String(order.id).split('-')[0].toUpperCase()}</td>
                           <td style={{ padding: '12px 20px' }}>
                             <select 
                               value={order.status}
@@ -562,7 +562,7 @@ export default function DeliveriesPage() {
                             )}
                           </td>
                           <td style={{ padding: '12px 20px', color: C.text }}>
-                            {order.items && order.items.length > 0 ? order.items.map(i => `${i.product_name} (${i.quantity}kg)`).join(', ') : '-'}
+                            {Array.isArray(order.items) && order.items.length > 0 ? order.items.map(i => `${i.product_name} (${i.quantity}kg)`).join(', ') : '-'}
                           </td>
                           <td style={{ padding: '12px 20px', fontWeight: 600 }}>₹{order.total_price}</td>
                           <td style={{ padding: '12px 20px', color: C.textMuted }}>{new Date(order.created_at).toLocaleString()}</td>

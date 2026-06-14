@@ -45,7 +45,7 @@ Instructions:
         method: "POST",
         headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
+          model: "google/gemini-1.5-flash",
           max_tokens: 500,
           messages: [{ role: "user", content: systemPrompt }]
         })
@@ -53,7 +53,7 @@ Instructions:
       const data = await response.json();
       replyText = data?.choices?.[0]?.message?.content?.trim();
     } else {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

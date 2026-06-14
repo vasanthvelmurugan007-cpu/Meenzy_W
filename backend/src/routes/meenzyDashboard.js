@@ -98,7 +98,7 @@ Give a concise, bulleted list of recommended purchase quantities. Keep it profes
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        "model": "google/gemini-2.5-flash",
+        "model": "google/gemini-1.5-flash",
         "max_tokens": 500,
         "messages": [{ "role": "user", "content": prompt }]
       })

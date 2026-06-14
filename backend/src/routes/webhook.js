@@ -47,12 +47,12 @@ Output ONLY valid JSON. No markdown wrappers. Example: {"title": "Meenzy Special
     if (apiKey.startsWith("sk-or-v1-")) {
       const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST", headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "google/gemini-2.5-flash", max_tokens: 150, messages: [{ role: "system", content: systemPrompt }] })
+        body: JSON.stringify({ model: "google/gemini-1.5-flash", max_tokens: 150, messages: [{ role: "system", content: systemPrompt }] })
       });
       const data = await response.json();
       text = data?.choices?.[0]?.message?.content?.trim();
     } else {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ contents: [{ parts: [{ text: systemPrompt }] }] })
       });
@@ -98,7 +98,7 @@ ${preferences ? `User Preferences: ${preferences}\n` : ''}Output ONLY the exact 
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          "model": "google/gemini-2.5-flash",
+          "model": "google/gemini-1.5-flash",
           "max_tokens": 500,
           "messages": [{ "role": "user", "content": prompt }]
         })
@@ -106,7 +106,7 @@ ${preferences ? `User Preferences: ${preferences}\n` : ''}Output ONLY the exact 
       const data = await response.json();
       textResult = data?.choices?.[0]?.message?.content?.trim() || 'GENERAL_FAQ';
     } else {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -150,7 +150,7 @@ ${preferences ? `Consider the user's saved preferences: ${preferences}\n` : ''}O
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          "model": "google/gemini-2.5-flash",
+          "model": "google/gemini-1.5-flash",
           "max_tokens": 1000,
           "messages": [
             { "role": "system", "content": systemPrompt },
@@ -161,7 +161,7 @@ ${preferences ? `Consider the user's saved preferences: ${preferences}\n` : ''}O
       const data = await response.json();
       text = data?.choices?.[0]?.message?.content?.trim() || '{"items":[], "reply":""}';
     } else {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -209,7 +209,7 @@ Customer Message: "${messageText}"`;
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          "model": "google/gemini-2.5-flash",
+          "model": "google/gemini-1.5-flash",
           "max_tokens": 500,
           "messages": [
             { "role": "system", "content": systemPrompt }
@@ -219,7 +219,7 @@ Customer Message: "${messageText}"`;
       const data = await response.json();
       text = data?.choices?.[0]?.message?.content?.trim();
     } else {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

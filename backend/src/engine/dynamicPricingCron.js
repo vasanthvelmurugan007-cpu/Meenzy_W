@@ -55,12 +55,12 @@ Output ONLY valid JSON. No markdown wrappers.`;
     if (apiKey.startsWith("sk-or-v1-")) {
       const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST", headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "google/gemini-2.5-flash", max_tokens: 800, messages: [{ role: "user", content: systemPrompt }] })
+        body: JSON.stringify({ model: "google/gemini-1.5-flash", max_tokens: 800, messages: [{ role: "user", content: systemPrompt }] })
       });
       const data = await response.json();
       text = data?.choices?.[0]?.message?.content?.trim();
     } else {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ contents: [{ parts: [{ text: systemPrompt }] }] })
       });
