@@ -406,10 +406,41 @@ router.put('/meenzy/preorders/:id/assign', async (req, res) => {
   const { id } = req.params;
   const { driver_id } = req.body;
   try {
+    // 1. Fetch preorder customer phone and item to match ecosystem order
+    const preRes = await pool.query(
+      `SELECT customer_phone, ordered_item FROM coexistence.meenzy_preorders WHERE id = $1`,
+      [id]
+    );
+
+    // 2. Update preorder driver_id
     const { rowCount } = await pool.query(
       `UPDATE coexistence.meenzy_preorders SET driver_id = $1 WHERE id = $2`,
       [driver_id || null, id]
     );
+
+    // 3. Sync driver assignment to the corresponding ecosystem order
+    if (preRes.rows.length > 0) {
+      const preorder = preRes.rows[0];
+      try {
+        const ecosystemOrderRes = await pool.query(`
+          SELECT o.id
+          FROM coexistence.ecosystem_orders o
+          JOIN coexistence.ecosystem_order_items i ON o.id = i.order_id
+          WHERE RIGHT(regexp_replace(o.user_phone, '\\D', '', 'g'), 10) = RIGHT($1, 10) AND i.product_name ILIKE $2
+          ORDER BY o.created_at DESC LIMIT 1
+        `, [String(preorder.customer_phone).replace(/\D/g, ''), `%${preorder.ordered_item}%`]);
+
+        if (ecosystemOrderRes.rows.length > 0) {
+          await pool.query(
+            `UPDATE coexistence.ecosystem_orders SET assigned_agent_id = $1 WHERE id = $2`,
+            [driver_id || null, ecosystemOrderRes.rows[0].id]
+          );
+        }
+      } catch (syncErr) {
+        console.error('[meenzy-assign-preorder] Sync error:', syncErr.message);
+      }
+    }
+
     res.json({ ok: true, updated: rowCount });
   } catch (err) {
     console.error('[meenzy-assign-preorder] Error:', err.message);
@@ -544,12 +575,20 @@ router.post('/meenzy/inventory-confirm', async (req, res) => {
       if (orderRes.rows.length > 0) {
         o = orderRes.rows[0];
       } else {
+        // Find if preorder has a driver assigned
+        const preRes = await pool.query(`
+          SELECT driver_id FROM coexistence.meenzy_preorders
+          WHERE customer_phone = $1 AND ordered_item ILIKE $2
+          ORDER BY created_at DESC LIMIT 1
+        `, [customer_phone, `%${ordered_item}%`]);
+        const preorderDriverId = preRes.rows.length > 0 ? preRes.rows[0].driver_id : null;
+
         // Customer never went to Wix checkout, but we still need tracking and OTP! Auto-create ecosystem order.
         const stubOrderRes = await pool.query(`
-          INSERT INTO coexistence.ecosystem_orders (user_phone, total_price, status, address_line)
-          VALUES ($1, 0, 'CREATED', 'WhatsApp Order')
+          INSERT INTO coexistence.ecosystem_orders (user_phone, total_price, status, address_line, assigned_agent_id)
+          VALUES ($1, 0, 'CREATED', 'WhatsApp Order', $2)
           RETURNING id, id as wix_order_id, total_price
-        `, [String(customer_phone).replace(/\D/g, '')]);
+        `, [String(customer_phone).replace(/\D/g, ''), preorderDriverId]);
         o = stubOrderRes.rows[0];
         
         await pool.query(`

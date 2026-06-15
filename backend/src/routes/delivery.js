@@ -73,6 +73,26 @@ router.post('/meenzy/delivery-agents/assign', async (req, res) => {
         `UPDATE coexistence.meenzy_preorders SET driver_id = $1, order_status = 'OUT_FOR_DELIVERY' WHERE id = $2`,
         [agent.id, order.id]
       );
+
+      // Sync driver assignment to the corresponding ecosystem order
+      try {
+        const ecosystemOrderRes = await pool.query(`
+          SELECT o.id
+          FROM coexistence.ecosystem_orders o
+          JOIN coexistence.ecosystem_order_items i ON o.id = i.order_id
+          WHERE RIGHT(regexp_replace(o.user_phone, '\\D', '', 'g'), 10) = RIGHT($1, 10) AND i.product_name ILIKE $2
+          ORDER BY o.created_at DESC LIMIT 1
+        `, [String(order.customer_phone).replace(/\D/g, ''), `%${order.ordered_item}%`]);
+
+        if (ecosystemOrderRes.rows.length > 0) {
+          await pool.query(
+            `UPDATE coexistence.ecosystem_orders SET assigned_agent_id = $1 WHERE id = $2`,
+            [agent.id, ecosystemOrderRes.rows[0].id]
+          );
+        }
+      } catch (syncErr) {
+        console.error(`[delivery-agents-assign] Sync error for preorder ${order.id}:`, syncErr.message);
+      }
       
       if (!itineraryByAgent[agent.id]) itineraryByAgent[agent.id] = { agent, orders: [] };
       itineraryByAgent[agent.id].orders.push(order);
