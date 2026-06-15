@@ -1615,9 +1615,12 @@ router.post('/webhook/whatsapp', async (req, res) => {
           if (r.message_type === 'audio' || r.message_type === 'voice') {
             downloadOne(r.message_id).then(async (result) => {
               if (result.ok && result.path && process.env.GROQ_API_KEY) {
+                const path = require('path');
                 const fs = require('fs');
+                const ext = path.extname(result.path) || '.mp3';
+                const filename = `audio${ext}`;
                 const formData = new FormData();
-                formData.append('file', new Blob([fs.readFileSync(result.path)]), 'audio.mp3');
+                formData.append('file', new Blob([fs.readFileSync(result.path)]), filename);
                 formData.append('model', 'whisper-large-v3');
                 
                 try {

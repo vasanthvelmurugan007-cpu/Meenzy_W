@@ -28,7 +28,7 @@ async function resolveAccountToken(waNumber) {
   if (!rows[0]?.access_token_encrypted) return null;
   try { return decrypt(rows[0].access_token_encrypted) || null; } catch { return null; }
 }
-const MEDIA_DIR = process.env.MEDIA_DIR || '/app/media';
+const MEDIA_DIR = process.env.MEDIA_DIR || path.join(__dirname, '../../media');
 const MEDIA_TYPES = new Set(['image', 'video', 'audio', 'voice', 'document', 'sticker']);
 const TRANSCODE_AUDIO = process.env.MEDIA_TRANSCODE_AUDIO !== 'false';  // default on
 const TRANSCODE_MIME_RE = /^audio\/(ogg|opus|amr|3gpp)/i;

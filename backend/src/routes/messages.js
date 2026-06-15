@@ -19,7 +19,7 @@ const ExcelJS = require('exceljs');
 const { Readable } = require('stream');
 
 const pexecFile = promisify(execFile);
-const MEDIA_DIR = process.env.MEDIA_DIR || '/app/media';
+const MEDIA_DIR = process.env.MEDIA_DIR || path.join(__dirname, '../../media');
 
 /**
  * A quote-reply's context message id is only valid to Meta if it's a real

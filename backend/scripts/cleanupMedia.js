@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const pool = require('../src/db');
 
-const MEDIA_DIR = process.env.MEDIA_DIR || '/app/media';
+const MEDIA_DIR = process.env.MEDIA_DIR || path.join(__dirname, '../media');
 const DEFAULT_DAYS = parseInt(process.env.MEDIA_RETENTION_DAYS || '180', 10);
 
 const args = process.argv.slice(2);
