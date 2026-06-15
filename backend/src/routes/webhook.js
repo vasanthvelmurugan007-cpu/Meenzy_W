@@ -1065,7 +1065,7 @@ router.post('/webhook/whatsapp', async (req, res) => {
             
             const { account, error } = await resolveAccount({});
             if (!error && account) {
-              const welcomeText = "✨ *Welcome to Meenzy Fresh Catch!* 🌊🦞\n\nLooking for the perfect, mouthwatering seafood dinner tonight? 🍽️ We bring the ocean's finest, live, and freshest catches straight from the nets to your kitchen!\n\nBrowse our fresh catch directly on our website:\n\n⚡ *High Protein*: https://www.meenzy.in/category/high-protien\n🔪 *Fillet (Boneless)*: https://www.meenzy.in/category/boneless\n🦐 *Shell Foods*: https://www.meenzy.in/category/shell-foods\n🛍️ *Instant Buy*: https://www.meenzy.in/category/instant-buy\n🐟 *All Varieties*: https://www.meenzy.in/category/all-products\n\nTap any link above to open our website and view today's catch!";
+              const welcomeText = "✨ *Welcome to Meenzy Fresh Catch!* 🌊🦞\n\nBrowse our full catalog and place your order directly on our website:\n🐟 https://www.meenzy.in/category/all-products\n\n💬 *Easy WhatsApp Ordering:*\n• *Text us:* Simply send the fish name and quantity (e.g., \"Seer fish 2kg\").\n• *Voice Orders:* Just send us a voice note with what you'd like!\n\n👨‍🍳 *Need Cooking Tips?*\nAsk us _\"how to cook my order\"_ or for recipe ideas, and our AI chef will help you out!";
 
               const localId = await insertPendingRow({
                 account,
