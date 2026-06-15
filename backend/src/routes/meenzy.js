@@ -994,10 +994,10 @@ router.get('/meenzy/batch-agent/context', async (req, res) => {
     let timeFilter = '';
     if (batch === 'batch1') {
       timeFilter = ` AND (EXTRACT(HOUR FROM created_at AT TIME ZONE 'Asia/Kolkata') * 60 + EXTRACT(MINUTE FROM created_at AT TIME ZONE 'Asia/Kolkata')) >= 300 
-                     AND (EXTRACT(HOUR FROM created_at AT TIME ZONE 'Asia/Kolkata') * 60 + EXTRACT(MINUTE FROM created_at AT TIME ZONE 'Asia/Kolkata')) <= 1420`;
+                     AND (EXTRACT(HOUR FROM created_at AT TIME ZONE 'Asia/Kolkata') * 60 + EXTRACT(MINUTE FROM created_at AT TIME ZONE 'Asia/Kolkata')) <= 1435`;
     } else if (batch === 'batch2') {
       timeFilter = ` AND ((EXTRACT(HOUR FROM created_at AT TIME ZONE 'Asia/Kolkata') * 60 + EXTRACT(MINUTE FROM created_at AT TIME ZONE 'Asia/Kolkata')) < 300 
-                     OR (EXTRACT(HOUR FROM created_at AT TIME ZONE 'Asia/Kolkata') * 60 + EXTRACT(MINUTE FROM created_at AT TIME ZONE 'Asia/Kolkata')) > 1420)`;
+                     OR (EXTRACT(HOUR FROM created_at AT TIME ZONE 'Asia/Kolkata') * 60 + EXTRACT(MINUTE FROM created_at AT TIME ZONE 'Asia/Kolkata')) > 1435)`;
     }
 
     const demandRes = await pool.query(
@@ -1044,10 +1044,10 @@ router.post('/meenzy/batch-agent/process', async (req, res) => {
     let timeFilter = '';
     if (batch === 'batch1') {
       timeFilter = ` AND (EXTRACT(HOUR FROM created_at AT TIME ZONE 'Asia/Kolkata') * 60 + EXTRACT(MINUTE FROM created_at AT TIME ZONE 'Asia/Kolkata')) >= 300 
-                     AND (EXTRACT(HOUR FROM created_at AT TIME ZONE 'Asia/Kolkata') * 60 + EXTRACT(MINUTE FROM created_at AT TIME ZONE 'Asia/Kolkata')) <= 1420`;
+                     AND (EXTRACT(HOUR FROM created_at AT TIME ZONE 'Asia/Kolkata') * 60 + EXTRACT(MINUTE FROM created_at AT TIME ZONE 'Asia/Kolkata')) <= 1435`;
     } else if (batch === 'batch2') {
       timeFilter = ` AND ((EXTRACT(HOUR FROM created_at AT TIME ZONE 'Asia/Kolkata') * 60 + EXTRACT(MINUTE FROM created_at AT TIME ZONE 'Asia/Kolkata')) < 300 
-                     OR (EXTRACT(HOUR FROM created_at AT TIME ZONE 'Asia/Kolkata') * 60 + EXTRACT(MINUTE FROM created_at AT TIME ZONE 'Asia/Kolkata')) > 1420)`;
+                     OR (EXTRACT(HOUR FROM created_at AT TIME ZONE 'Asia/Kolkata') * 60 + EXTRACT(MINUTE FROM created_at AT TIME ZONE 'Asia/Kolkata')) > 1435)`;
     }
 
     // Fetch all pending confirmations ordered by created_at ASC (first come, first served)
