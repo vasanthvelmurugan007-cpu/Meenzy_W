@@ -1384,24 +1384,60 @@ router.post('/webhook/whatsapp', async (req, res) => {
                } catch(e) {}
 
                const intent = await triageWithLLM(trimmedBody, prefs);
+               
+               // Fetch Autopilot Mode
+               let isAutopilot = false;
+               try {
+                 const { rows: settingsRows } = await client.query(`SELECT value FROM coexistence.meenzy_settings WHERE key = 'ai_autopilot_mode'`);
+                 if (settingsRows.length > 0) isAutopilot = settingsRows[0].value === true || settingsRows[0].value === 'true';
+               } catch(e) {}
+
                if (intent === 'HUMAN_HANDOFF') {
-                 await client.query(`
-                   UPDATE coexistence.contacts 
-                   SET tags = tags || '[{"id": 998, "name": "Human_Needed", "color": "#f59e0b"}]'::jsonb, 
-                       bot_paused_until = NOW() + INTERVAL '24 hours',
-                       updated_at = NOW()
-                   WHERE contact_number = $1
-                 `, [r.contact_number]);
-                 
-                 const { resolveAccount, insertPendingRow } = require('../services/messageSender');
-                 const { enqueueSend } = require('../queue/sendQueue');
-                 const { account } = await resolveAccount({});
-                 if (account) {
-                   const text = "I have paused my automated responses. A human from our team will chat with you shortly! 🧑‍💼 (Type 'resume bot' anytime to wake me up)";
-                   const localId = await insertPendingRow({ account, toNumber: r.contact_number, messageType: 'text', messageBody: text });
-                   await enqueueSend({ kind: 'text', accountId: account.id, to: String(r.contact_number).replace(/\D/g, ''), localMessageId: localId, payload: { body: text, previewUrl: false } });
+                 if (isAutopilot) {
+                   // Autopilot Mode: Do NOT pause the bot. The AI acts as the agent.
+                   const { resolveAccount, insertPendingRow } = require('../services/messageSender');
+                   const { enqueueSend } = require('../queue/sendQueue');
+                   const { account } = await resolveAccount({});
+                   if (account) {
+                     const apiKey = process.env.OPENROUTER_API_KEY || process.env.GEMINI_API_KEY;
+                     let text = "Our human agents are currently offline, but I am Meenzy's advanced AI support agent! 🤖 How can I help you right now?";
+                     if (apiKey) {
+                       try {
+                         const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+                           method: "POST", headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+                           body: JSON.stringify({
+                             model: "google/gemma-4-31b-it:free", max_tokens: 150,
+                             messages: [{ role: "system", content: "You are an AI assistant for Meenzy Fresh Seafood. The user asked for a human, but humans are away. Apologize nicely and tell them you are an advanced AI here to assist them fully. Keep it under 2 sentences." }, { role: "user", content: trimmedBody }]
+                           })
+                         });
+                         const data = await response.json();
+                         if (data?.choices?.[0]?.message?.content) text = data.choices[0].message.content.trim();
+                       } catch(e) {}
+                     }
+                     const localId = await insertPendingRow({ account, toNumber: r.contact_number, messageType: 'text', messageBody: text });
+                     await enqueueSend({ kind: 'text', accountId: account.id, to: String(r.contact_number).replace(/\D/g, ''), localMessageId: localId, payload: { body: text, previewUrl: false } });
+                   }
+                   console.log(`[llm-triage] Autopilot handled HUMAN_HANDOFF for ${r.contact_number}`);
+                 } else {
+                   // Manual Mode: Pause bot for 24 hours
+                   await client.query(`
+                     UPDATE coexistence.contacts 
+                     SET tags = tags || '[{"id": 998, "name": "Human_Needed", "color": "#f59e0b"}]'::jsonb, 
+                         bot_paused_until = NOW() + INTERVAL '24 hours',
+                         updated_at = NOW()
+                     WHERE contact_number = $1
+                   `, [r.contact_number]);
+                   
+                   const { resolveAccount, insertPendingRow } = require('../services/messageSender');
+                   const { enqueueSend } = require('../queue/sendQueue');
+                   const { account } = await resolveAccount({});
+                   if (account) {
+                     const text = "I have paused my automated responses. A human from our team will chat with you shortly! 🧑‍💼 (Type 'resume bot' anytime to wake me up)";
+                     const localId = await insertPendingRow({ account, toNumber: r.contact_number, messageType: 'text', messageBody: text });
+                     await enqueueSend({ kind: 'text', accountId: account.id, to: String(r.contact_number).replace(/\D/g, ''), localMessageId: localId, payload: { body: text, previewUrl: false } });
+                   }
+                   console.log(`[llm-triage] Flagged HUMAN_HANDOFF for ${r.contact_number}`);
                  }
-                 console.log(`[llm-triage] Flagged HUMAN_HANDOFF for ${r.contact_number}`);
                  r.__handled = true;
                } else if (intent === 'ORDER_COMPLAINT') {
                  await client.query(`

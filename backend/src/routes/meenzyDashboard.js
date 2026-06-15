@@ -151,4 +151,42 @@ router.post('/meenzy/dashboard/zero-waste/trigger', async (req, res) => {
   }
 });
 
+// GET Settings (e.g. ai_autopilot_mode)
+router.get('/meenzy/dashboard/settings', async (req, res) => {
+  try {
+    await pool.query(`CREATE TABLE IF NOT EXISTS coexistence.meenzy_settings (key VARCHAR(255) PRIMARY KEY, value JSONB NOT NULL, updated_at TIMESTAMP DEFAULT NOW())`);
+    
+    // Auto-seed default
+    await pool.query(`INSERT INTO coexistence.meenzy_settings (key, value) VALUES ('ai_autopilot_mode', 'false'::jsonb) ON CONFLICT (key) DO NOTHING`);
+    
+    const { rows } = await pool.query(`SELECT key, value FROM coexistence.meenzy_settings`);
+    const settings = {};
+    rows.forEach(r => { settings[r.key] = r.value; });
+    res.json(settings);
+  } catch (err) {
+    console.error('[meenzy-settings-get] Error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// POST Settings
+router.post('/meenzy/dashboard/settings', async (req, res) => {
+  const { key, value } = req.body;
+  if (!key) return res.status(400).json({ error: 'Missing key' });
+
+  try {
+    await pool.query(`CREATE TABLE IF NOT EXISTS coexistence.meenzy_settings (key VARCHAR(255) PRIMARY KEY, value JSONB NOT NULL, updated_at TIMESTAMP DEFAULT NOW())`);
+    await pool.query(`
+      INSERT INTO coexistence.meenzy_settings (key, value, updated_at) 
+      VALUES ($1, $2, NOW()) 
+      ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()
+    `, [key, JSON.stringify(value)]);
+    
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[meenzy-settings-post] Error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 module.exports = router;

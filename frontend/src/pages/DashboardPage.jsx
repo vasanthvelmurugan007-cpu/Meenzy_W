@@ -6,12 +6,18 @@ import { LayoutDashboard, Users, Package, TrendingUp } from 'lucide-react';
 export default function DashboardPage({ user, onPageChange }) {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [autopilotMode, setAutopilotMode] = useState(false);
+  const [toggling, setToggling] = useState(false);
 
   useEffect(() => {
     async function loadStats() {
       try {
-        const res = await api.meenzyDashboard();
+        const [res, settings] = await Promise.all([
+          api.meenzyDashboard(),
+          api.getMeenzySettings().catch(() => ({}))
+        ]);
         setStats(res);
+        setAutopilotMode(settings.ai_autopilot_mode === true || settings.ai_autopilot_mode === 'true');
       } catch (err) {
         console.error('Failed to load dashboard stats:', err);
       } finally {
@@ -31,9 +37,39 @@ export default function DashboardPage({ user, onPageChange }) {
 
   return (
     <div style={{ padding: '24px 32px', fontFamily: FONT, background: C.pageBg, minHeight: '100%' }}>
-      <h1 className="spring-pop" style={{ fontSize: 24, fontWeight: 700, margin: '0 0 24px 0', color: C.text }}>
-        Meenzy Admin Dashboard
-      </h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+        <h1 className="spring-pop" style={{ fontSize: 24, fontWeight: 700, margin: 0, color: C.text }}>
+          Meenzy Admin Dashboard
+        </h1>
+        
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: C.cardBg, padding: '8px 16px', borderRadius: 999, border: `1px solid ${C.border}` }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: !autopilotMode ? C.primary : C.textSecondary }}>Manual Mode</span>
+          <button 
+            disabled={toggling}
+            onClick={async () => {
+              const nextVal = !autopilotMode;
+              setToggling(true);
+              try {
+                await api.updateMeenzySetting('ai_autopilot_mode', nextVal);
+                setAutopilotMode(nextVal);
+              } catch(e) {
+                alert('Failed to update mode');
+              }
+              setToggling(false);
+            }}
+            style={{ 
+              width: 44, height: 24, borderRadius: 12, background: autopilotMode ? '#10b981' : '#cbd5e1',
+              border: 'none', cursor: toggling ? 'wait' : 'pointer', position: 'relative', transition: 'background 0.2s', padding: 0
+            }}
+          >
+            <div style={{
+              width: 20, height: 20, borderRadius: '50%', background: 'white', position: 'absolute', top: 2,
+              left: autopilotMode ? 22 : 2, transition: 'left 0.2s', boxShadow: C.shadowSm
+            }} />
+          </button>
+          <span style={{ fontSize: 13, fontWeight: 600, color: autopilotMode ? '#10b981' : C.textSecondary }}>AI Autopilot</span>
+        </div>
+      </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 32 }}>
         <div className="spring-pop hover-lift" style={{ background: C.cardBg, padding: 20, borderRadius: 16, border: `1px solid ${C.border}`, boxShadow: C.shadowSm }}>

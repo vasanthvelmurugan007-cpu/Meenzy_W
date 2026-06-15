@@ -29,6 +29,16 @@ async function handleAIComplaintResolution(contactNumber, messageText) {
       }
     }
 
+    let isAutopilot = false;
+    try {
+      const { rows: settingsRows } = await pool.query(`SELECT value FROM coexistence.meenzy_settings WHERE key = 'ai_autopilot_mode'`);
+      if (settingsRows.length > 0) isAutopilot = settingsRows[0].value === true || settingsRows[0].value === 'true';
+    } catch(e) {}
+
+    const autopilotInstructions = isAutopilot 
+      ? `3. Autopilot Mode is ON: Do NOT say a manager is reviewing it. Instead, autonomously resolve it by apologizing deeply and offering them a 10% discount code "MEENZYSORRY10" for their next order to instantly make up for the issue.`
+      : `3. Manual Mode is ON: Reassure them that a senior manager is also reviewing their case.`;
+
     const systemPrompt = `You are a highly empathetic Customer Service Manager for Meenzy Fresh Seafood. 
 A customer has sent a complaint or issue regarding their order.
 Below is the customer's message and their latest order details from our database.
@@ -39,7 +49,7 @@ ${orderContext}
 Instructions:
 1. Write a sincere, empathetic apology.
 2. Provide a real-time update using the order details provided above (e.g. if status is OUT_FOR_DELIVERY, tell them the agent is on the way).
-3. Reassure them that a senior manager is also reviewing their case.
+${autopilotInstructions}
 4. CRITICAL: You must reply in the EXACT SAME LANGUAGE the customer used in their message. If they used English, use English. If they used Tamil, use Tamil (Tamil script or Tanglish). If Hindi, use Hindi.
 5. Use appropriate emojis. Keep it concise (under 4 sentences).`;
 
