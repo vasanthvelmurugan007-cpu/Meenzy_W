@@ -47,7 +47,7 @@ Output ONLY valid JSON. No markdown wrappers. Example: {"title": "Meenzy Special
     if (apiKey && apiKey.startsWith("sk-or-v1-")) {
       const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST", headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "google/gemini-1.5-flash", max_tokens: 150, messages: [{ role: "system", content: systemPrompt }] })
+        body: JSON.stringify({ model: "google/gemma-4-31b-it:free", max_tokens: 150, messages: [{ role: "system", content: systemPrompt }] })
       });
       const data = await response.json();
       text = data?.choices?.[0]?.message?.content?.trim();
@@ -114,7 +114,7 @@ ${preferences ? `User Preferences: ${preferences}\n` : ''}Output ONLY the exact 
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          "model": "google/gemini-1.5-flash",
+          "model": "google/gemma-4-31b-it:free",
           "max_tokens": 500,
           "messages": [{ "role": "user", "content": prompt }]
         })
@@ -189,7 +189,7 @@ ${preferences ? `Consider the user's saved preferences: ${preferences}\n` : ''}O
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          "model": "google/gemini-1.5-flash",
+          "model": "google/gemma-4-31b-it:free",
           "max_tokens": 1000,
           "messages": [
             { "role": "system", "content": systemPrompt },
@@ -275,7 +275,7 @@ Customer Message: "${messageText}"`;
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          "model": "google/gemini-1.5-flash",
+          "model": "google/gemma-4-31b-it:free",
           "max_tokens": 500,
           "messages": [
             { "role": "system", "content": systemPrompt }

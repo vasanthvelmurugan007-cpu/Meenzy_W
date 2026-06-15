@@ -50,7 +50,7 @@ Instructions:
         method: "POST",
         headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "google/gemini-1.5-flash",
+          model: "google/gemma-4-31b-it:free",
           max_tokens: 300,
           messages: [{ role: "user", content: systemPrompt }]
         })

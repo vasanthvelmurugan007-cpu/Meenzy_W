@@ -25,7 +25,7 @@ Output ONLY the exact category name.`;
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        "model": "google/gemini-1.5-flash",
+        "model": "google/gemma-4-31b-it:free",
         "messages": [{ "role": "user", "content": prompt }]
       })
     });
