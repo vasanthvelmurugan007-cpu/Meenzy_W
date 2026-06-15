@@ -170,7 +170,7 @@ async function confirmOrder(orderId, trackingNumber = null) {
   try {
     // 1. Fetch preorder details
     const orderRes = await pool.query(
-      `SELECT customer_phone, ordered_item, quantity, driver_id FROM coexistence.meenzy_preorders WHERE id = $1`,
+      `SELECT customer_phone, ordered_item, quantity, driver_id, address_line FROM coexistence.meenzy_preorders WHERE id = $1`,
       [orderId]
     );
     if (orderRes.rows.length === 0) {
@@ -205,16 +205,55 @@ async function confirmOrder(orderId, trackingNumber = null) {
     if (existingOrderRes.rows.length > 0) {
       ecosystemOrderId = existingOrderRes.rows[0].id;
       wixOrderId = existingOrderRes.rows[0].wix_order_id || ecosystemOrderId;
-      // Update assigned agent if needed
+      
+      const { rows: currentEco } = await pool.query(
+        `SELECT address_line, lat, lng FROM coexistence.ecosystem_orders WHERE id = $1`,
+        [ecosystemOrderId]
+      );
+      
+      const updateFields = [];
+      const updateParams = [];
+      let paramIdx = 1;
+
       if (order.driver_id) {
-        await pool.query(`UPDATE coexistence.ecosystem_orders SET assigned_agent_id = $1 WHERE id = $2`, [order.driver_id, ecosystemOrderId]);
+        updateFields.push(`assigned_agent_id = $${paramIdx++}`);
+        updateParams.push(order.driver_id);
+      }
+
+      const currentAddress = currentEco[0]?.address_line;
+      if ((!currentAddress || currentAddress === 'WhatsApp Preorder') && order.address_line) {
+        updateFields.push(`address_line = $${paramIdx++}`);
+        updateParams.push(order.address_line);
+
+        const { geocodeAddress } = require('../services/geocoder');
+        const geo = await geocodeAddress(order.address_line);
+        if (geo) {
+          updateFields.push(`lat = $${paramIdx++}`);
+          updateParams.push(geo.lat);
+          updateFields.push(`lng = $${paramIdx++}`);
+          updateParams.push(geo.lng);
+        }
+      }
+
+      if (updateFields.length > 0) {
+        updateParams.push(ecosystemOrderId);
+        await pool.query(
+          `UPDATE coexistence.ecosystem_orders SET ${updateFields.join(', ')} WHERE id = $${paramIdx}`,
+          updateParams
+        );
       }
     } else {
+      const addressToUse = order.address_line || 'WhatsApp Preorder';
+      const { geocodeAddress } = require('../services/geocoder');
+      const geo = await geocodeAddress(addressToUse);
+      const lat = geo ? geo.lat : null;
+      const lng = geo ? geo.lng : null;
+
       const stubOrderRes = await pool.query(`
-        INSERT INTO coexistence.ecosystem_orders (user_phone, total_price, status, address_line, assigned_agent_id)
-        VALUES ($1, $2, 'CREATED', 'WhatsApp Preorder', $3)
+        INSERT INTO coexistence.ecosystem_orders (user_phone, total_price, status, address_line, assigned_agent_id, lat, lng)
+        VALUES ($1, $2, 'CREATED', $3, $4, $5, $6)
         RETURNING id, id as wix_order_id
-      `, [String(order.customer_phone).replace(/\D/g, ''), total, order.driver_id || null]);
+      `, [String(order.customer_phone).replace(/\D/g, ''), total, addressToUse, order.driver_id || null, lat, lng]);
       
       ecosystemOrderId = stubOrderRes.rows[0].id;
       wixOrderId = stubOrderRes.rows[0].wix_order_id;
