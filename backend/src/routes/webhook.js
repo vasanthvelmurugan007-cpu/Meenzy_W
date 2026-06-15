@@ -1632,7 +1632,6 @@ router.post('/webhook/whatsapp', async (req, res) => {
                     const transcript = data.text;
                     console.log('[voice-order] Transcribed text:', transcript);
                     
-                    const fetch = require('node-fetch');
                     const dummyReq = {
                       object: 'whatsapp_business_account',
                       entry: [{
@@ -1653,9 +1652,17 @@ router.post('/webhook/whatsapp', async (req, res) => {
                       }]
                     };
                     
-                    fetch(`http://127.0.0.1:${process.env.PORT || 3000}/api/webhook/whatsapp`, {
+                    const headers = { 'Content-Type': 'application/json' };
+                    if (process.env.META_APP_SECRET) {
+                      const crypto = require('crypto');
+                      const rawBody = JSON.stringify(dummyReq);
+                      const signature = 'sha256=' + crypto.createHmac('sha256', process.env.META_APP_SECRET).update(rawBody).digest('hex');
+                      headers['x-hub-signature-256'] = signature;
+                    }
+                    
+                    fetch(`http://127.0.0.1:${process.env.PORT || 3001}/api/webhook/whatsapp`, {
                       method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
+                      headers: headers,
                       body: JSON.stringify(dummyReq)
                     }).catch(e => console.error('[voice-loopback] Error:', e.message));
                   }
