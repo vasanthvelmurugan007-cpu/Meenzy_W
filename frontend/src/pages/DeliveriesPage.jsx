@@ -242,10 +242,7 @@ export default function DeliveriesPage() {
     if (!showHeatmap) {
       if (!heatmapData) {
         try {
-          const res = await fetch(`${api.baseUrl}/admin/forecasting/heatmap`, {
-            headers: { 'Authorization': `Bearer ${api.token}` }
-          });
-          const json = await res.json();
+          const json = await api.forecasting.heatmap();
           if (json.ok) setHeatmapData(json.data);
           else alert('Failed to load AI Heatmap');
         } catch (e) {
@@ -261,11 +258,7 @@ export default function DeliveriesPage() {
     if (!confirm('Are you sure you want to let the AI automatically cluster and assign all unassigned orders to the nearest available agents?')) return;
     setIsAiClustering(true);
     try {
-      const res = await fetch(`${api.baseUrl}/admin/orders/ai-dispatch`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${api.token}` }
-      });
-      const json = await res.json();
+      const json = await api.deliveries.aiDispatch();
       if (json.ok) {
         alert(`🤖 AI Auto-Dispatch Complete!\nSuccessfully clustered and assigned ${json.assignedCount} orders!`);
         fetchOrders();
@@ -593,6 +586,9 @@ export default function DeliveriesPage() {
                   <button onClick={() => handleCancel(order.id)} style={{ padding: '8px 16px', background: '#fee2e2', color: '#991b1b', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
                     Cancel & Restock
                   </button>
+                  <button onClick={() => handleDelete(order.id)} style={{ padding: '8px 16px', background: 'transparent', color: '#ef4444', border: '1px solid #ef4444', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <Trash2 size={16} /> Delete
+                  </button>
                 </div>
               </div>
             ))}
@@ -705,7 +701,6 @@ export default function DeliveriesPage() {
                         <th style={{ padding: '12px 20px', fontWeight: 600 }}>Items</th>
                         <th style={{ padding: '12px 20px', fontWeight: 600 }}>Value</th>
                         <th style={{ padding: '12px 20px', fontWeight: 600 }}>Date</th>
-                        <th style={{ padding: '12px 20px', fontWeight: 600 }}></th>
                       </tr>
                     </thead>
                     <tbody style={{ fontSize: 13, color: C.text }}>
@@ -719,7 +714,16 @@ export default function DeliveriesPage() {
                               style={{ cursor: 'pointer' }}
                             />
                           </td>
-                          <td style={{ padding: '12px 20px', fontWeight: 600 }}>{order.wix_order_id || String(order.id).split('-')[0].toUpperCase()}</td>
+                          <td style={{ padding: '12px 20px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+                            {order.wix_order_id || String(order.id).split('-')[0].toUpperCase()}
+                            <button 
+                              onClick={() => handleDelete(order.id)} 
+                              style={{ padding: '4px', background: 'transparent', color: '#ef4444', border: 'none', cursor: 'pointer', borderRadius: 4, display: 'flex', alignItems: 'center' }}
+                              title="Delete Order"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </td>
                           <td style={{ padding: '12px 20px' }}>
                             <select 
                               value={order.status}
@@ -775,15 +779,6 @@ export default function DeliveriesPage() {
                           </td>
                           <td style={{ padding: '12px 20px', fontWeight: 600 }}>₹{order.total_price}</td>
                           <td style={{ padding: '12px 20px', color: C.textMuted }}>{new Date(order.created_at).toLocaleString()}</td>
-                          <td style={{ padding: '12px 10px', textAlign: 'right' }}>
-                            <button 
-                              onClick={() => handleDelete(order.id)} 
-                              style={{ padding: '6px', background: 'transparent', color: '#ef4444', border: 'none', cursor: 'pointer', borderRadius: 6 }}
-                              title="Delete Order"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </td>
                         </tr>
                       ))}
                     </tbody>
