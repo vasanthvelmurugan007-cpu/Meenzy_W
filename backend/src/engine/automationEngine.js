@@ -1387,7 +1387,10 @@ async function handleMeenzyInteractiveButton(client, contactNumber, btnId, accou
   else if (btnId === 'qty_20') qtyValue = 2.0;
 
   let slotValue = null;
-  if (btnId === 'slot_morning') slotValue = "Morning (7 AM - 10 AM)";
+  if (btnId === 'slot_morning') {
+    const { getTomorrowMorningSlot } = require('../services/deliveryScheduler');
+    slotValue = getTomorrowMorningSlot();
+  }
   else if (btnId === 'slot_midday') slotValue = "Mid-Day (11 AM - 2 PM)";
   else if (btnId === 'slot_evening') slotValue = "Evening (4 PM - 7 PM)";
 
@@ -1524,7 +1527,10 @@ async function handleMeenzyInteractiveButton(client, contactNumber, btnId, accou
             {
               title: "3. Delivery Slots",
               rows: [
-                { id: "slot_morning", title: "Morning (7 AM - 10 AM)" },
+                { id: "slot_morning", title: (() => {
+                  const { getTomorrowMorningSlot } = require('../services/deliveryScheduler');
+                  return getTomorrowMorningSlot();
+                })() },
                 { id: "slot_midday", title: "Mid-Day (11 AM - 2 PM)" },
                 { id: "slot_evening", title: "Evening (4 PM - 7 PM)" }
               ]

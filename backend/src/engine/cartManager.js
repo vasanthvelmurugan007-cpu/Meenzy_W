@@ -231,29 +231,8 @@ async function checkoutCart(whatsappId, account) {
     await enqueueSend({ kind: 'text', accountId: account.id, to: String(whatsappId).replace(/\D/g, ''), localMessageId: localId, payload: { body: confirmText, previewUrl: false } });
 
     // Send Delivery Request Message
-    const deliveryPayload = {
-      type: "list",
-      body: { text: "📅 When would you like your order delivered? Please select a date and time slot below:" },
-      action: {
-        button: "Select Schedule",
-        sections: [
-          {
-            title: "Today",
-            rows: [
-              { id: "C_DEL:Today:Evening (4 PM - 7 PM)", title: "Today Evening", description: "4 PM - 7 PM" }
-            ]
-          },
-          {
-            title: "Tomorrow",
-            rows: [
-              { id: "C_DEL:Tomorrow:Morning (7 AM - 10 AM)", title: "Tomorrow Morning", description: "7 AM - 10 AM" },
-              { id: "C_DEL:Tomorrow:Mid-Day (11 AM - 2 PM)", title: "Tomorrow Mid-Day", description: "11 AM - 2 PM" },
-              { id: "C_DEL:Tomorrow:Evening (4 PM - 7 PM)", title: "Tomorrow Evening", description: "4 PM - 7 PM" }
-            ]
-          }
-        ]
-      }
-    };
+    const { getDeliveryPayload } = require('../services/deliveryScheduler');
+    const deliveryPayload = getDeliveryPayload();
     await sendMessage(whatsappId, account, deliveryPayload, 'Request Delivery Schedule');
 
   } catch (e) {
@@ -289,15 +268,22 @@ async function handleCartState(whatsappId, account, incomingPayload) {
   if (incomingPayload.startsWith('C_DEL:')) {
     const parts = incomingPayload.split(':');
     if (parts.length >= 3) {
-      const deliveryDate = parts[1]; // Today or Tomorrow
+      const deliveryDate = parts[1]; // e.g. "Today", "Tomorrow", or numeric string "0", "1", "2"
       const deliveryTime = parts.slice(2).join(':'); // Time string
       
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
         
-        // Calculate date offset (Today=0, Tomorrow=1)
-        const dateOffset = deliveryDate === 'Today' ? 0 : 1;
+        // Calculate date offset (Today=0, Tomorrow=1, otherwise parse integer)
+        let dateOffset = 0;
+        if (deliveryDate === 'Today') {
+          dateOffset = 0;
+        } else if (deliveryDate === 'Tomorrow') {
+          dateOffset = 1;
+        } else {
+          dateOffset = parseInt(deliveryDate, 10) || 0;
+        }
         
         // Update preorders
         await client.query(

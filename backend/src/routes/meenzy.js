@@ -136,29 +136,8 @@ async function processCheckout(customerPhone, cartItems, catalogId) {
     console.log(`[meenzy-checkout] Account fetched:`, account ? account.id : 'null');
     if (account) {
       console.log(`[meenzy-checkout] Building delivery payload...`);
-      const deliveryPayload = {
-        type: "list",
-        body: { text: "📅 When would you like your order delivered? Please select a date and time slot below:" },
-        action: {
-          button: "Select Schedule",
-          sections: [
-            {
-              title: "Today",
-              rows: [
-                { id: "C_DEL:Today:Evening (4 PM - 7 PM)", title: "Today Evening", description: "4 PM - 7 PM" }
-              ]
-            },
-            {
-              title: "Tomorrow",
-              rows: [
-                { id: "C_DEL:Tomorrow:Morning (7 AM - 10 AM)", title: "Tomorrow Morning", description: "7 AM - 10 AM" },
-                { id: "C_DEL:Tomorrow:Mid-Day (11 AM - 2 PM)", title: "Tomorrow Mid-Day", description: "11 AM - 2 PM" },
-                { id: "C_DEL:Tomorrow:Evening (4 PM - 7 PM)", title: "Tomorrow Evening", description: "4 PM - 7 PM" }
-              ]
-            }
-          ]
-        }
-      };
+      const { getDeliveryPayload } = require('../services/deliveryScheduler');
+      const deliveryPayload = getDeliveryPayload();
       
       console.log(`[meenzy-checkout] Calling insertPendingRow...`);
       const localId = await insertPendingRow({ 
