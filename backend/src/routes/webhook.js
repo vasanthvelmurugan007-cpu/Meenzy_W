@@ -1220,6 +1220,12 @@ router.post('/webhook/whatsapp', async (req, res) => {
           }
         }
 
+        // MEENZY Custom Workflow Rule 4.9: Suppress Synchronous AI for Voice
+        if (r.direction === 'incoming' && (r.message_type === 'audio' || r.message_type === 'voice') && !r.__handled) {
+          console.log(`[voice-order] Supressing synchronous AI for raw audio message from ${r.contact_number}. Waiting for Whisper transcription...`);
+          r.__handled = true;
+        }
+
         // MEENZY Custom Workflow Rule 5: LLM Triage and Swap parser
         if (r.direction === 'incoming' && r.message_body && !r.__handled) {
           const trimmedBody = r.message_body.trim();
