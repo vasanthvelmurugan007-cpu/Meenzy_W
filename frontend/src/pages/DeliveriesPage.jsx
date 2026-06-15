@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../api';
-import { AlertTriangle, CheckCircle, Package, RefreshCw, XCircle, Clock, MapPin, Navigation, Sparkles } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Package, RefreshCw, XCircle, Clock, MapPin, Navigation, Sparkles, Trash2 } from 'lucide-react';
 import Map, { Marker, NavigationControl, Popup, Source, Layer } from 'react-map-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { C, FONT } from '../constants';
@@ -139,6 +139,16 @@ export default function DeliveriesPage() {
       fetchOrders();
     } catch (err) {
       alert('Failed to cancel: ' + err.message);
+    }
+  }
+
+  async function handleDelete(id) {
+    if (!confirm('Are you sure you want to permanently delete this order? This action cannot be undone.')) return;
+    try {
+      await api.deliveries.delete(id);
+      fetchOrders();
+    } catch (err) {
+      alert('Failed to delete: ' + err.message);
     }
   }
 
@@ -610,8 +620,8 @@ export default function DeliveriesPage() {
                     <MapPin size={18} /> {zone.replace(/^\d+\.\s*/, '')} <span style={{ fontSize: 12, color: C.textSecondary, fontWeight: 500 }}>({zoneOrders.length} Orders, {unassignedOrders.length} Unassigned)</span>
                   </h2>
                   
-                  {unassignedOrders.length > 0 && (
-                    <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                  <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                    {unassignedOrders.length > 0 && (
                       <button 
                         onClick={async () => {
                           if (!confirm(`Are you sure you want AI to automatically balance and assign these ${unassignedOrders.length} unassigned orders in ${zone}?`)) return;
@@ -627,39 +637,49 @@ export default function DeliveriesPage() {
                       >
                         <Sparkles size={14} /> AI Assign Zone
                       </button>
-                      <div style={{ width: 1, height: 20, background: '#cbd5e1' }} />
-                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                        <select
-                          id={`select-${zoneSafeId}`}
-                          style={{ padding: '6px 8px', borderRadius: 4, border: '1px solid #d1d5db', fontSize: 12, outline: 'none' }}
-                        >
-                          <option value="">Manual Agent...</option>
-                          {agents.filter(a => a.is_active).map(a => (
-                            <option key={a.id} value={a.id}>{a.name}</option>
-                          ))}
-                        </select>
-                        <button 
-                          onClick={async () => {
-                            const selectEl = document.getElementById(`select-${zoneSafeId}`);
-                            const agentId = selectEl.value;
-                            if (!agentId) { alert('Please select an agent first'); return; }
-                            if (!confirm(`Assign ${unassignedOrders.length} orders in ${zone} to this agent?`)) return;
-                            try {
-                              const res = await api.deliveries.bulkAssign(agentId, unassignedIds);
-                              alert(`Successfully assigned ${res.assignedCount} orders!`);
-                              selectEl.value = '';
-                              fetchOrders();
-                            } catch (err) {
-                              alert('Manual bulk assign failed: ' + err.message);
-                            }
-                          }}
-                          style={{ padding: '6px 12px', background: '#10b981', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
-                        >
-                          Assign
-                        </button>
-                      </div>
+                    )}
+                    {unassignedOrders.length > 0 && <div style={{ width: 1, height: 20, background: '#cbd5e1' }} />}
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <select
+                        id={`select-${zoneSafeId}`}
+                        style={{ padding: '6px 8px', borderRadius: 4, border: '1px solid #d1d5db', fontSize: 12, outline: 'none' }}
+                      >
+                        <option value="">Manual Agent...</option>
+                        {agents.filter(a => a.is_active).map(a => (
+                          <option key={a.id} value={a.id}>{a.name}</option>
+                        ))}
+                      </select>
+                      <button 
+                        onClick={async () => {
+                          const selectEl = document.getElementById(`select-${zoneSafeId}`);
+                          const agentId = selectEl.value;
+                          if (!agentId) { alert('Please select an agent first'); return; }
+                          
+                          const selectedInZone = zoneOrders.filter(o => selectedOrderIds.has(o.id)).map(o => o.id);
+                          const idsToAssign = selectedInZone.length > 0 ? selectedInZone : unassignedIds;
+                          
+                          if (idsToAssign.length === 0) {
+                            alert('No unassigned orders to assign. Please select specific orders using the checkboxes to manually assign them.');
+                            return;
+                          }
+                          
+                          if (!confirm(`Assign ${idsToAssign.length} orders in ${zone} to this agent?`)) return;
+                          try {
+                            const res = await api.deliveries.bulkAssign(agentId, idsToAssign);
+                            alert(`Successfully assigned ${res.assignedCount} orders!`);
+                            selectEl.value = '';
+                            setSelectedOrderIds(new Set());
+                            fetchOrders();
+                          } catch (err) {
+                            alert('Manual bulk assign failed: ' + err.message);
+                          }
+                        }}
+                        style={{ padding: '6px 12px', background: '#10b981', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}
+                      >
+                        Assign
+                      </button>
                     </div>
-                  )}
+                  </div>
                 </div>
                 <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
@@ -685,6 +705,7 @@ export default function DeliveriesPage() {
                         <th style={{ padding: '12px 20px', fontWeight: 600 }}>Items</th>
                         <th style={{ padding: '12px 20px', fontWeight: 600 }}>Value</th>
                         <th style={{ padding: '12px 20px', fontWeight: 600 }}>Date</th>
+                        <th style={{ padding: '12px 20px', fontWeight: 600 }}></th>
                       </tr>
                     </thead>
                     <tbody style={{ fontSize: 13, color: C.text }}>
@@ -754,6 +775,15 @@ export default function DeliveriesPage() {
                           </td>
                           <td style={{ padding: '12px 20px', fontWeight: 600 }}>₹{order.total_price}</td>
                           <td style={{ padding: '12px 20px', color: C.textMuted }}>{new Date(order.created_at).toLocaleString()}</td>
+                          <td style={{ padding: '12px 10px', textAlign: 'right' }}>
+                            <button 
+                              onClick={() => handleDelete(order.id)} 
+                              style={{ padding: '6px', background: 'transparent', color: '#ef4444', border: 'none', cursor: 'pointer', borderRadius: 6 }}
+                              title="Delete Order"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </td>
                         </tr>
                       ))}
                     </tbody>

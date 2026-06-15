@@ -306,6 +306,7 @@ export const api = {
   },
   deliveries: {
     list: () => req('/admin/orders'),
+    delete: (id) => req(`/admin/orders/${id}`, { method: 'DELETE' }),
     reattempt: (id) => req(`/admin/orders/${id}/reattempt`, { method: 'POST' }),
     cancel: (id) => req(`/admin/orders/${id}/cancel`, { method: 'POST' }),
     updateStatus: (id, status) => req(`/admin/orders/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) }),

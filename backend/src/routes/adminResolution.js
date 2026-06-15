@@ -587,4 +587,38 @@ router.put('/:id/assign', async (req, res) => {
   }
 });
 
+/**
+ * DELETE /api/admin/orders/:id
+ * Deletes an order permanently
+ */
+router.delete('/:id', async (req, res) => {
+  const { id } = req.params;
+  let client;
+  try {
+    client = await pool.connect();
+    await client.query('BEGIN');
+
+    // Delete items first
+    await client.query('DELETE FROM coexistence.ecosystem_order_items WHERE order_id = $1', [id]);
+    
+    // Delete history and jobs
+    await client.query('DELETE FROM coexistence.ecosystem_order_history WHERE order_id = $1', [id]);
+    await client.query('DELETE FROM coexistence.ecosystem_delivery_jobs WHERE order_id = $1', [id]);
+
+    // Delete order
+    const { rowCount } = await client.query('DELETE FROM coexistence.ecosystem_orders WHERE id = $1', [id]);
+
+    if (rowCount === 0) throw new Error('Order not found');
+
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch (err) {
+    if (client) await client.query('ROLLBACK');
+    res.status(400).json({ error: err.message });
+  } finally {
+    if (client) client.release();
+  }
+});
+
 module.exports = { router };
+

@@ -980,7 +980,7 @@ router.post('/webhook/whatsapp', async (req, res) => {
                 const encodedCart = encodeURIComponent(base64Cart);
                 const checkoutUrl = `https://www.meenzy.in/cart-page?data=${encodedCart}&phone=${r.contact_number}`;
                 
-                const confText = `🐟 *Meenzy Preorder Initiated!* 🌊\n\nYour preorder for *${resolvedItem} (${qty} kg)* is almost ready!\n\nPlease click the link below to review your exact order details, see the price, and securely checkout on our website:\n${checkoutUrl}\n\n📍 *Temporary:* Please reply to this message with your 6-digit delivery Pincode so we can assign your delivery zone correctly!\n\nThank you! 🍽️`;
+                const confText = `🐟 *Meenzy Preorder Initiated!* 🌊\n\nYour preorder for *${resolvedItem} (${qty} kg)* is almost ready!\n\nPlease click the link below to review your exact order details, see the price, and securely checkout on our website:\n${checkoutUrl}\n\nThank you! 🍽️`;
                 const localId = await insertPendingRow({
                   account,
                   toNumber: r.contact_number,
@@ -1492,7 +1492,7 @@ router.post('/webhook/whatsapp', async (req, res) => {
                       const encodedCart = encodeURIComponent(base64Cart);
                       const checkoutUrl = `https://www.meenzy.in/cart-page?data=${encodedCart}&phone=${r.contact_number}`;
 
-                      confMsg += `\nYour smart cart is ready! 🛒\n\nPlease click the link below to review your exact order details and securely checkout on our website:\n${checkoutUrl}\n\n📍 *Temporary:* Please reply to this message with your 6-digit delivery Pincode so we can assign your delivery zone correctly!\n\nThank you for choosing Meenzy Fresh Seafood! 🍽️`;
+                      confMsg += `\nYour smart cart is ready! 🛒\n\nPlease click the link below to review your exact order details and securely checkout on our website:\n${checkoutUrl}\n\nThank you for choosing Meenzy Fresh Seafood! 🍽️`;
                       
                       const crossSell = await generateCrossSellLLM(cartPayload);
                       if (crossSell) {
