@@ -43,35 +43,6 @@ export default function PublicCatalog() {
       .then(data => {
         setProducts(data || []);
         setLoading(false);
-        
-        // Auto-load items from "data" parameter if present
-        try {
-          const params = new URLSearchParams(window.location.search || window.location.hash.split('?')[1]);
-          const dataParam = params.get('data');
-          if (dataParam && data && data.length > 0) {
-            const decodedStr = atob(decodeURIComponent(dataParam));
-            const decodedItems = JSON.parse(decodedStr);
-            if (Array.isArray(decodedItems)) {
-              const initialCart = {};
-              for (const line of decodedItems) {
-                // Find matching product case-insensitively by title or ID
-                const matchedProduct = data.find(p => 
-                  p.title.toLowerCase().trim() === line.item.toLowerCase().trim() ||
-                  p.id === line.item
-                );
-                if (matchedProduct) {
-                  initialCart[matchedProduct.id] = parseFloat(line.qty) || 1;
-                }
-              }
-              if (Object.keys(initialCart).length > 0) {
-                setCart(initialCart);
-                setCartOpen(true); // Auto-open the cart drawer so they see the pre-populated items
-              }
-            }
-          }
-        } catch (err) {
-          console.error('Failed to pre-populate cart from URL data:', err);
-        }
       })
       .catch(err => {
         console.error('Catalog fetch error:', err);

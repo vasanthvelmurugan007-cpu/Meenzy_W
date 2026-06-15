@@ -978,8 +978,7 @@ router.post('/webhook/whatsapp', async (req, res) => {
                 const cartPayload = [{ item: resolvedItem, qty }];
                 const base64Cart = Buffer.from(JSON.stringify(cartPayload)).toString('base64');
                 const encodedCart = encodeURIComponent(base64Cart);
-                const frontendUrl = process.env.CORS_ORIGIN || 'https://meenzy-frontend.onrender.com';
-                const checkoutUrl = `${frontendUrl}/#/catalog?data=${encodedCart}&phone=${r.contact_number}`;
+                const checkoutUrl = `https://www.meenzy.in/cart-page?data=${encodedCart}&phone=${r.contact_number}`;
                 
                 const confText = `🐟 *Meenzy Preorder Initiated!* 🌊\n\nYour preorder for *${resolvedItem} (${qty} kg)* is almost ready!\n\nPlease click the link below to review your exact order details, see the price, and securely checkout on our website:\n${checkoutUrl}\n\nThank you! 🍽️`;
                 const localId = await insertPendingRow({
@@ -1497,8 +1496,7 @@ router.post('/webhook/whatsapp', async (req, res) => {
                       
                       const base64Cart = Buffer.from(JSON.stringify(cartPayload)).toString('base64');
                       const encodedCart = encodeURIComponent(base64Cart);
-                      const frontendUrl = process.env.CORS_ORIGIN || 'https://meenzy-frontend.onrender.com';
-                 const checkoutUrl = `${frontendUrl}/#/catalog?data=${encodedCart}&phone=${r.contact_number}`;
+                      const checkoutUrl = `https://www.meenzy.in/cart-page?data=${encodedCart}&phone=${r.contact_number}`;
 
                       confMsg += `\nYour smart cart is ready! 🛒\n\nPlease click the link below to review your exact order details and securely checkout on our website:\n${checkoutUrl}\n\nThank you for choosing Meenzy Fresh Seafood! 🍽️`;
                       
