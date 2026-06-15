@@ -39,6 +39,8 @@ services:
           type: redis
           name: meenzy-redis
           property: connectionString
+      - key: GROQ_API_KEY
+        sync: false
 
   # -------------------------
   # 4. Frontend (Static Site)
