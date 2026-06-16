@@ -448,11 +448,33 @@ export default function AgentPortalPage() {
           return (idxA === -1 ? 999 : idxA) - (idxB === -1 ? 999 : idxB);
         });
         setOrders(sorted);
+      } else {
+        alert('Could not optimize sequence. Try again.');
       }
     } catch (err) {
-      alert('AI Optimization failed: ' + err.message);
+      console.error(err);
+      alert('Optimization failed. Server error.');
     } finally {
       setOptimizing(false);
+    }
+  }
+
+  async function handleStartRoute() {
+    if (orders.length === 0) return;
+    
+    // Generate the Google Maps URL
+    const googleMapsUrl = `https://www.google.com/maps/dir/?api=1${agentLocation ? `&origin=${agentLocation.lat},${agentLocation.lng}` : ''}&destination=${orders[orders.length-1].lat ? `${orders[orders.length-1].lat},${orders[orders.length-1].lng}` : ''}&waypoints=${orders.slice(0, -1).filter(o => o.lat && o.lng).map(o => `${o.lat},${o.lng}`).join('|')}`;
+    
+    // Attempt to notify backend to trigger WhatsApp templates
+    try {
+      setOptimizing(true); // Reuse optimizing state for loading indicator
+      await api.agentPortal.startRoute(selectedAgent.id, { orders }, agentToken);
+    } catch (err) {
+      console.error('Failed to send WhatsApp templates on start route:', err);
+    } finally {
+      setOptimizing(false);
+      // Open maps immediately after
+      window.open(googleMapsUrl, '_blank');
     }
   }
 
@@ -742,19 +764,18 @@ export default function AgentPortalPage() {
               <Sparkles size={18} /> {optimizing ? 'AI is analyzing route...' : 'Optimize Sequence with AI'}
             </button>
             
-            <a 
-              href={`https://www.google.com/maps/dir/?api=1${agentLocation ? `&origin=${agentLocation.lat},${agentLocation.lng}` : ''}&destination=${orders.length > 0 && orders[orders.length-1].lat ? `${orders[orders.length-1].lat},${orders[orders.length-1].lng}` : ''}&waypoints=${orders.slice(0, -1).filter(o => o.lat && o.lng).map(o => `${o.lat},${o.lng}`).join('|')}`}
-              target="_blank" 
-              rel="noreferrer"
+            <button 
+              onClick={handleStartRoute}
+              disabled={optimizing}
               style={{ 
-                width: '100%', padding: '14px 20px', background: '#10b981', textDecoration: 'none',
+                width: '100%', padding: '14px 20px', background: '#10b981', 
                 color: '#fff', border: 'none', borderRadius: 12, fontSize: 15, fontWeight: 700, 
-                cursor: 'pointer', display: 'flex', alignItems: 'center', 
+                cursor: optimizing ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', 
                 justifyContent: 'center', gap: 8, boxShadow: '0 4px 10px rgba(16, 185, 129, 0.3)'
               }}
             >
               <Navigation size={18} /> Start Driving (Multi-Stop Maps)
-            </a>
+            </button>
           </div>
         )}
 

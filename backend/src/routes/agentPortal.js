@@ -452,4 +452,87 @@ router.put('/:agentId/location', verifyAgent, async (req, res) => {
   }
 });
 
+// POST start route (Send WhatsApp Templates)
+router.post('/:agentId/start-route', verifyAgent, async (req, res) => {
+  const { orders } = req.body || {};
+
+  if (!orders || !Array.isArray(orders) || orders.length === 0) {
+    return res.json({ ok: false, error: 'No orders provided' });
+  }
+
+  try {
+    // Fetch default WhatsApp account for sending templates
+    const { rows } = await pool.query('SELECT access_token, phone_number_id FROM coexistence.whatsapp_accounts WHERE is_active = true ORDER BY created_at ASC LIMIT 1');
+    const account = rows[0];
+
+    if (!account || !account.access_token || !account.phone_number_id) {
+      console.warn('[start-route] No active WhatsApp account found. Skipping templates.');
+      return res.json({ ok: true });
+    }
+
+    const metaToken = account.access_token;
+    const phoneNumberId = account.phone_number_id;
+
+    const promises = orders.map(async (order) => {
+      // Validate customer phone exists
+      if (!order.user_phone) return;
+
+      const customerName = order.customer_name || 'Customer';
+      // Format phone number to E.164 without '+'
+      let phone = order.user_phone.replace(/\D/g, '');
+      if (!phone.startsWith('91') && phone.length === 10) {
+        phone = '91' + phone;
+      }
+
+      // Wix order id or generated id
+      const orderIdDisplay = order.wix_order_id || order.id.split('-')[0].toUpperCase();
+
+      const payload = {
+        messaging_product: "whatsapp",
+        to: phone,
+        type: "template",
+        template: {
+          name: "order_out_for_delivery",
+          language: { code: "en" },
+          components: [
+            {
+              type: "body",
+              parameters: [
+                { type: "text", text: customerName },
+                { type: "text", text: orderIdDisplay }
+              ]
+            }
+          ]
+        }
+      };
+
+      try {
+        const result = await fetch(`https://graph.facebook.com/${process.env.META_API_VERSION || 'v21.0'}/${phoneNumberId}/messages`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${metaToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await result.json();
+        if (!result.ok) {
+          console.error(`[Meta API Error] sending out_for_delivery to ${phone}:`, data);
+        } else {
+          console.log(`[start-route] Sent WhatsApp template to ${phone} for order ${orderIdDisplay}`);
+        }
+      } catch (err) {
+        console.error(`[Meta Network Error] sending to ${phone}:`, err.message);
+      }
+    });
+
+    await Promise.allSettled(promises);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[start-route error]', err.message);
+    res.json({ ok: false, error: err.message });
+  }
+});
+
 module.exports = router;
