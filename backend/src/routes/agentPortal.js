@@ -346,11 +346,6 @@ router.post('/:agentId/optimize-route', verifyAgent, async (req, res) => {
   console.log('[optimize-route] Received body:', req.body);
   const { currentLat, currentLng, orders } = req.body || {};
   
-  if (!process.env.MAPBOX_ACCESS_TOKEN) {
-    console.warn('[optimize-route] MAPBOX_ACCESS_TOKEN is missing. Returning unoptimized sequence.');
-    return res.json({ ok: true, sequence: (orders || []).map(o => o.id) });
-  }
-  
   if (!orders || !Array.isArray(orders) || orders.length < 2) {
     return res.json({ ok: true, sequence: (orders || []).map(o => o.id) });
   }
