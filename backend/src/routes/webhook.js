@@ -443,6 +443,84 @@ async function fetchCatalogProducts() {
   }
 }
 
+async function generateWixCheckoutUrl(items) {
+  try {
+    const wixApiKey = process.env.WIX_API_KEY;
+    const siteId = process.env.WIX_SITE_ID;
+    if (!wixApiKey || !siteId) {
+      console.warn('[meenzy-wix] Missing API keys for Wix checkout generation');
+      return null;
+    }
+
+    const catalogProducts = await fetchCatalogProducts();
+    const lineItems = [];
+    
+    for (const item of items) {
+      // Find the closest match in the catalog
+      let bestMatch = catalogProducts.find(p => p.name.toLowerCase().includes(item.item.toLowerCase()));
+      if (!bestMatch) {
+         const baseName = getBaseFishName(item.item).toLowerCase();
+         bestMatch = catalogProducts.find(p => p.name.toLowerCase().includes(baseName));
+      }
+      
+      if (bestMatch && bestMatch.productId) {
+        lineItems.push({
+          catalogReference: {
+            catalogItemId: bestMatch.productId,
+            appId: '215238eb-22a5-4c36-9e7b-e7c08025e04e' // Wix Stores App ID
+          },
+          quantity: parseFloat(item.qty) || 1
+        });
+      }
+    }
+
+    if (lineItems.length === 0) return null;
+
+    // 1. Create Checkout
+    const checkoutRes = await fetch('https://www.wixapis.com/ecom/v1/checkouts', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': wixApiKey,
+        'wix-site-id': siteId
+      },
+      body: JSON.stringify({
+        channelType: 'WEB',
+        lineItems
+      })
+    });
+    
+    const checkoutData = await checkoutRes.json();
+    if (!checkoutData.checkout?.id) return null;
+
+    // 2. Create Redirect Session
+    const redirectRes = await fetch('https://www.wixapis.com/redirects/v1/redirect-session', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': wixApiKey,
+        'wix-site-id': siteId
+      },
+      body: JSON.stringify({
+        ecomCheckout: {
+          checkoutId: checkoutData.checkout.id
+        },
+        callbacks: {
+          postFlowUrl: 'https://meenzy.com/thank-you'
+        }
+      })
+    });
+    
+    const redirectData = await redirectRes.json();
+    return redirectData.redirectSession?.fullUrl || null;
+    
+  } catch (err) {
+    console.error('[meenzy-wix] Error generating checkout URL:', err.message);
+    return null;
+  }
+}
+
+
 function getBaseFishName(name) {
   let clean = name.split(/[\/\-\(]/)[0].trim();
   clean = clean.replace(/[\u0B80-\u0BFF]/g, '').trim();
@@ -1496,7 +1574,12 @@ router.post('/webhook/whatsapp', async (req, res) => {
                       
                       const base64Cart = Buffer.from(JSON.stringify(cartPayload)).toString('base64');
                       const encodedCart = encodeURIComponent(base64Cart);
-                      const checkoutUrl = `https://www.meenzy.in/cart-page?data=${encodedCart}&phone=${r.contact_number}`;
+                      let checkoutUrl = await generateWixCheckoutUrl(cartPayload);
+                      
+                      // Fallback to our custom checkout page if Wix API fails or item not found
+                      if (!checkoutUrl) {
+                        checkoutUrl = `https://www.meenzy.in/cart-page?data=${encodedCart}&phone=${r.contact_number}`;
+                      }
 
                       confMsg += `\nYour smart cart is ready! 🛒\n\nPlease click the link below to review your exact order details and securely checkout on our website:\n${checkoutUrl}\n\nThank you for choosing Meenzy Fresh Seafood! 🍽️`;
                       
