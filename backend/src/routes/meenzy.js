@@ -620,9 +620,10 @@ router.post('/meenzy/inventory-confirm', async (req, res) => {
         const trackingPhone = String(customer_phone).replace(/\D/g, '').slice(-4);
         const trackingLink = `${process.env.CORS_ORIGIN || 'https://meenzy-frontend.onrender.com'}/#/track/${o.id}?phone=${trackingPhone}`;
         
-        // Generate OTP and save to ecosystem_orders
+        // Generate OTP and save to ecosystem_orders & meenzy_preorders
         const otp = Math.floor(1000 + Math.random() * 9000).toString();
         await pool.query(`UPDATE coexistence.ecosystem_orders SET delivery_otp = $1 WHERE id = $2`, [otp, o.id]);
+        await pool.query(`UPDATE coexistence.meenzy_preorders SET otp = $1 WHERE customer_phone = $2 AND ordered_item ILIKE $3`, [otp, customer_phone, `%${ordered_item}%`]);
         
         const receiptSummary = `${ordered_item} - Secured from catch | Total: ₹${o.total_price}`;
         const trackingId = String(displayOrderId).split('-')[0].slice(0, 8);
