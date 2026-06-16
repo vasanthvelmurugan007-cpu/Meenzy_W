@@ -443,20 +443,23 @@ async function fetchCatalogProducts() {
   }
 }
 
+const { createClient, OAuthStrategy } = require('@wix/sdk');
+const { checkout } = require('@wix/ecom');
+const { redirects } = require('@wix/redirects');
+
 async function generateWixCheckoutUrl(items) {
   try {
-    const wixApiKey = process.env.WIX_API_KEY;
-    const siteId = process.env.WIX_SITE_ID;
-    if (!wixApiKey || !siteId) {
-      console.warn('[meenzy-wix] Missing API keys for Wix checkout generation');
-      return null;
-    }
+    const clientId = process.env.WIX_CLIENT_ID || '635247a5-3db1-4e5a-8e25-d16605063b14';
+
+    const wixClient = createClient({
+      modules: { checkout, redirects },
+      auth: OAuthStrategy({ clientId })
+    });
 
     const catalogProducts = await fetchCatalogProducts();
     const lineItems = [];
     
     for (const item of items) {
-      // Find the closest match in the catalog
       let bestMatch = catalogProducts.find(p => p.name.toLowerCase().includes(item.item.toLowerCase()));
       if (!bestMatch) {
          const baseName = getBaseFishName(item.item).toLowerCase();
@@ -476,43 +479,24 @@ async function generateWixCheckoutUrl(items) {
 
     if (lineItems.length === 0) return null;
 
-    // 1. Create Checkout
-    const checkoutRes = await fetch('https://www.wixapis.com/ecom/v1/checkouts', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': wixApiKey,
-        'wix-site-id': siteId
-      },
-      body: JSON.stringify({
-        channelType: 'WEB',
-        lineItems
-      })
+    // 1. Create Checkout via SDK
+    const chk = await wixClient.checkout.createCheckout({
+      channelType: 'WEB',
+      lineItems
     });
     
-    const checkoutData = await checkoutRes.json();
-    if (!checkoutData.checkout?.id) return null;
+    const checkoutId = chk.checkoutId || chk.id || (chk.checkout ? chk.checkout.id : null);
+    if (!checkoutId) return null;
 
-    // 2. Create Redirect Session
-    const redirectRes = await fetch('https://www.wixapis.com/redirects/v1/redirect-session', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': wixApiKey,
-        'wix-site-id': siteId
-      },
-      body: JSON.stringify({
-        ecomCheckout: {
-          checkoutId: checkoutData.checkout.id
-        },
-        callbacks: {
-          postFlowUrl: 'https://meenzy.com/thank-you'
-        }
-      })
+    // 2. Create Redirect Session via SDK
+    const redirectSession = await wixClient.redirects.createRedirectSession({
+      ecomCheckout: { checkoutId },
+      callbacks: {
+        postFlowUrl: 'https://meenzy.com/thank-you'
+      }
     });
     
-    const redirectData = await redirectRes.json();
-    return redirectData.redirectSession?.fullUrl || null;
+    return redirectSession.redirectSession?.fullUrl || null;
     
   } catch (err) {
     console.error('[meenzy-wix] Error generating checkout URL:', err.message);

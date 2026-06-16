@@ -12,6 +12,9 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
+    "@wix/ecom": "^1.0.2158",
+    "@wix/redirects": "^1.0.117",
+    "@wix/sdk": "^1.21.12",
     "bcryptjs": "^2.4.3",
     "bullmq": "^5.77.2",
     "cookie-parser": "^1.4.6",
