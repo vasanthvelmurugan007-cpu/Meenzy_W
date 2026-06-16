@@ -364,100 +364,81 @@ router.post('/:agentId/optimize-route', verifyAgent, async (req, res) => {
   }
 
   try {
-    // Delivery agent starts from current location, or first order location if unknown
-    const startLat = currentLat ? parseFloat(currentLat) : (validOrders.length > 0 ? parseFloat(validOrders[0].lat) : 13.123565);
-    const startLng = currentLng ? parseFloat(currentLng) : (validOrders.length > 0 ? parseFloat(validOrders[0].lng) : 80.291771);
-    const hub = { id: 'hub', lat: startLat, lng: startLng };
-    
-    const locations = [
-      hub,
-      ...validOrders.map(o => ({
-        id: o.id,
-        lat: parseFloat(o.lat),
-        lng: parseFloat(o.lng)
-      }))
-    ];
-
-    // Mapbox Optimization API limit is 12 coordinates per request.
-    // We chunk validOrders into batches of 11 (+1 for the hub/start point).
-    let optimizedSequence = [];
-    let currentStartLat = startLat;
-    let currentStartLng = startLng;
-    
-    // Create a mutable copy of validOrders
-    const pendingOrders = [...validOrders];
-
-    while (pendingOrders.length > 0) {
-      const batchOrders = pendingOrders.splice(0, 11); // Take up to 11 orders
-      const hub = { id: 'hub', lat: currentStartLat, lng: currentStartLng };
-      
-      const locations = [
-        hub,
-        ...batchOrders.map(o => ({
-          id: o.id,
-          lat: parseFloat(o.lat),
-          lng: parseFloat(o.lng)
-        }))
-      ];
-
-      const coordinateString = locations.map(loc => `${loc.lng},${loc.lat}`).join(';');
-      const url = `https://api.mapbox.com/optimized-trips/v1/mapbox/driving/${coordinateString}?source=first&destination=any&roundtrip=true&access_token=${process.env.MAPBOX_ACCESS_TOKEN}`;
-
-      const response = await fetch(url, { method: 'GET', headers: { 'Content-Type': 'application/json' } });
-      const data = await response.json();
-
-      if (!response.ok || data.code !== 'Ok') {
-        console.error(`[Mapbox Error] ${response.status}: ${data.message || JSON.stringify(data)}`);
-        // Fallback: append the rest unoptimized
-        optimizedSequence.push(...batchOrders.map(o => o.id));
-        optimizedSequence.push(...pendingOrders.map(o => o.id));
-        break;
-      }
-
-      const sortedLocations = new Array(locations.length);
-      data.waypoints.forEach((waypoint, originalIndex) => {
-          sortedLocations[waypoint.waypoint_index] = locations[originalIndex];
-      });
-
-      let batchSequence = sortedLocations
-        .filter(loc => loc && loc.id !== 'hub')
-        .map(loc => loc.id);
-
-      // Mapbox roundtrip anomaly fix for this batch
-      if (batchSequence.length > 1) {
-        const firstId = batchSequence[0];
-        const lastId = batchSequence[batchSequence.length - 1];
-        
-        const firstLoc = batchOrders.find(o => o.id === firstId);
-        const lastLoc = batchOrders.find(o => o.id === lastId);
-        
-        if (firstLoc && lastLoc) {
-          const distToFirst = Math.pow(currentStartLat - parseFloat(firstLoc.lat), 2) + Math.pow(currentStartLng - parseFloat(firstLoc.lng), 2);
-          const distToLast = Math.pow(currentStartLat - parseFloat(lastLoc.lat), 2) + Math.pow(currentStartLng - parseFloat(lastLoc.lng), 2);
-          
-          if (distToLast < distToFirst) {
-             batchSequence.reverse();
-          }
-        }
-      }
-
-      optimizedSequence.push(...batchSequence);
-
-      // Set the last order of this batch as the start location for the next batch
-      if (batchSequence.length > 0) {
-        const lastOrderId = batchSequence[batchSequence.length - 1];
-        const lastOrder = batchOrders.find(o => o.id === lastOrderId);
-        if (lastOrder) {
-          currentStartLat = parseFloat(lastOrder.lat);
-          currentStartLng = parseFloat(lastOrder.lng);
-        }
-      }
+    const groqKey = process.env.GROQ_API_KEY;
+    if (!groqKey) {
+      console.warn('[optimize-route] Missing GROQ_API_KEY. Returning unoptimized sequence.');
+      return res.json({ ok: true, sequence: orders.map(o => o.id) });
     }
 
-    // Append any orders that didn't have GPS coordinates at the end
-    const finalSequence = [...optimizedSequence, ...missingOrders];
+    const startLat = currentLat ? parseFloat(currentLat) : null;
+    const startLng = currentLng ? parseFloat(currentLng) : null;
+    const startText = startLat && startLng ? `Agent is starting at coordinates Lat: ${startLat}, Lng: ${startLng}` : "Agent is starting at the first order's location.";
 
-    res.json({ ok: true, sequence: finalSequence });
+    const orderListText = validOrders.map(o => `- ID: "${o.id}", Address: "${o.address_line}", Lat: ${o.lat}, Lng: ${o.lng}`).join('\n');
+
+    const prompt = `You are a hyperlocal delivery logistics AI.
+Your task is to find the mathematically shortest and most logical delivery sequence for the following orders. Group them logically by neighborhood and minimize driving distance.
+${startText}
+
+Orders:
+${orderListText}
+
+Output ONLY a JSON array of strings containing the exact order IDs in the optimal delivery sequence. Do not include any other text, explanation, or markdown formatting (e.g., no \`\`\`json). Just the array.
+Example: ["id1", "id2", "id3"]`;
+
+    try {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${groqKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'llama-3.3-70b-versatile',
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.1
+        })
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        console.error('[Groq Error]', data);
+        return res.json({ ok: true, sequence: orders.map(o => o.id) });
+      }
+
+      let aiResponse = data.choices?.[0]?.message?.content || '[]';
+      
+      // Clean up markdown if the AI mistakenly included it
+      aiResponse = aiResponse.replace(/```json/g, '').replace(/```/g, '').trim();
+
+      let optimizedSequence = [];
+      try {
+        optimizedSequence = JSON.parse(aiResponse);
+      } catch (parseErr) {
+        console.error('[Groq JSON Parse Error]', aiResponse);
+        optimizedSequence = validOrders.map(o => o.id);
+      }
+
+      // Ensure all valid orders are in the sequence and no hallucinated IDs are there
+      const finalOptimized = [];
+      for (const id of optimizedSequence) {
+        if (validOrders.find(o => o.id === id)) {
+          finalOptimized.push(id);
+        }
+      }
+      for (const o of validOrders) {
+        if (!finalOptimized.includes(o.id)) {
+          finalOptimized.push(o.id);
+        }
+      }
+
+      const finalSequence = [...finalOptimized, ...missingOrders];
+      res.json({ ok: true, sequence: finalSequence });
+    } catch (apiErr) {
+      console.error('[Groq API Error]', apiErr);
+      res.json({ ok: true, sequence: orders.map(o => o.id) });
+    }
   } catch (err) {
     console.error('[Mapbox Optimize Error]', err.message);
     // Fallback to unoptimized sequence if something crashes
