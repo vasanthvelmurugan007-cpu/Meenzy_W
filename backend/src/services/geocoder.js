@@ -11,46 +11,45 @@ async function geocodeAddress(address) {
   const pincodeMatch = address.match(/\b\d{6}\b/);
   const pincode = pincodeMatch ? pincodeMatch[0] : null;
 
-  const mapboxToken = process.env.MAPBOX_ACCESS_TOKEN;
-  if (mapboxToken) {
+  const openCageKey = process.env.OPENCAGE_API_KEY;
+  if (openCageKey) {
     try {
       // 1. Try full address
-      let url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(address)}.json?access_token=${mapboxToken}&limit=1`;
+      let url = `https://api.opencagedata.com/geocode/v1/json?q=${encodeURIComponent(address)}&key=${openCageKey}&limit=1`;
       let response = await fetch(url, { signal: AbortSignal.timeout(5000) });
       if (response.ok) {
         let data = await response.json();
-        if (data.features && data.features.length > 0) {
-          const feature = data.features[0];
-          // If relevance is good, use it
-          if (feature.relevance >= 0.7 || !pincode) {
-            const [lng, lat] = feature.center;
-            console.log(`[Geocoder] Mapbox resolved full address "${address}" (relevance: ${feature.relevance}) -> Lat: ${lat}, Lng: ${lng}`);
+        if (data.results && data.results.length > 0) {
+          const result = data.results[0];
+          const { lat, lng } = result.geometry;
+          // OpenCage provides confidence score (10 is best, 1 is worst)
+          if (result.confidence >= 5 || !pincode) {
+            console.log(`[Geocoder] OpenCage resolved full address "${address}" (confidence: ${result.confidence}) -> Lat: ${lat}, Lng: ${lng}`);
             return { lat, lng };
           }
-          console.log(`[Geocoder] Mapbox low relevance (${feature.relevance}) for "${address}". Falling back to pincode.`);
+          console.log(`[Geocoder] OpenCage low confidence (${result.confidence}) for "${address}". Falling back to pincode.`);
         }
       }
       
       // 2. Fallback to pincode if available
       if (pincode) {
-        url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(pincode + ', India')}.json?access_token=${mapboxToken}&limit=1`;
+        url = `https://api.opencagedata.com/geocode/v1/json?q=${encodeURIComponent(pincode + ', India')}&key=${openCageKey}&limit=1`;
         response = await fetch(url, { signal: AbortSignal.timeout(5000) });
         if (response.ok) {
           let data = await response.json();
-          if (data.features && data.features.length > 0) {
-            const feature = data.features[0];
-            const [lng, lat] = feature.center;
-            console.log(`[Geocoder] Mapbox resolved pincode "${pincode}" -> Lat: ${lat}, Lng: ${lng}`);
+          if (data.results && data.results.length > 0) {
+            const { lat, lng } = data.results[0].geometry;
+            console.log(`[Geocoder] OpenCage resolved pincode "${pincode}" -> Lat: ${lat}, Lng: ${lng}`);
             return { lat, lng };
           }
         }
       }
     } catch (error) {
-      console.error('[Geocoder] Mapbox error, falling back to Nominatim:', error.message);
+      console.error('[Geocoder] OpenCage error, falling back to Nominatim:', error.message);
     }
   }
 
-  // Fallback to Nominatim (OpenStreetMap)
+  // Fallback to Nominatim (OpenStreetMap) if OpenCage key is missing or fails
   try {
     const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1`;
     const response = await fetch(url, {
