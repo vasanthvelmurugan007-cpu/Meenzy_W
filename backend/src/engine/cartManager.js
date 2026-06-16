@@ -223,12 +223,51 @@ async function checkoutCart(whatsappId, account) {
     
     await client.query('COMMIT');
     
-    // Send Order Confirmation
-    const lines = cart.cart_items.map(item => `• ${item.base_name} (${item.quantity} Kg)`);
-    const confirmText = `🎉 *Order Confirmed!* 🎉\n\nThank you for choosing Meenzy! Your fresh catch is being prepped. 🌊\n\n*Order ID:* #${orderId}\n*Total:* ₹${totalAmt}\n\n*Items:*\n${lines.join('\n')}`;
+    // Send Order Confirmation as Meta Template
+    const itemsList = cart.cart_items.map(item => `${item.base_name} (${item.quantity} Kg)`);
+    const receiptSummary = `Items: ${itemsList.join(', ')} | Total: ₹${totalAmt}`;
+    const trackingId = orderId;
+    const templateMsg = `Order confirmed. Receipt: ${receiptSummary}. Tracking: ${trackingId}`;
     
-    const localId = await insertPendingRow({ account, toNumber: whatsappId, messageType: 'text', messageBody: confirmText });
-    await enqueueSend({ kind: 'text', accountId: account.id, to: String(whatsappId).replace(/\D/g, ''), localMessageId: localId, payload: { body: confirmText, previewUrl: false } });
+    const localId = await insertPendingRow({
+      account,
+      toNumber: whatsappId,
+      messageType: 'template',
+      messageBody: templateMsg,
+      templateMeta: {
+        name: 'meenzy_order_confirmation',
+        language: { code: 'en' },
+        components: [
+          {
+            type: 'body',
+            parameters: [
+              { type: 'text', text: receiptSummary },
+              { type: 'text', text: trackingId }
+            ]
+          }
+        ]
+      }
+    });
+
+    await enqueueSend({
+      kind: 'template',
+      accountId: account.id,
+      to: String(whatsappId).replace(/\D/g, ''),
+      localMessageId: localId,
+      payload: {
+        name: 'meenzy_order_confirmation',
+        languageCode: 'en',
+        components: [
+          {
+            type: 'body',
+            parameters: [
+              { type: 'text', text: receiptSummary },
+              { type: 'text', text: trackingId }
+            ]
+          }
+        ]
+      }
+    });
 
     // Send Delivery Request Message
     const { getDeliveryPayload } = require('../services/deliveryScheduler');
