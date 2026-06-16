@@ -428,7 +428,23 @@ router.get('/:agentId/stats', verifyAgent, async (req, res) => {
     const totalPaid = parseFloat(payoutRows[0].total_paid) || 0;
     const walletBalance = totalEarnings - totalPaid;
 
-    res.json({ ok: true, stats: { totalDeliveries, totalEarnings, totalPaid, walletBalance } });
+    // Calculate day-wise earnings (last 7 days)
+    const { rows: dailyRows } = await pool.query(`
+      SELECT DATE(updated_at) as date, COUNT(*) as deliveries
+      FROM coexistence.ecosystem_orders
+      WHERE assigned_agent_id = $1 AND status = 'DELIVERED'
+      GROUP BY DATE(updated_at)
+      ORDER BY date DESC
+      LIMIT 7
+    `, [agentId]);
+
+    const earningsByDay = dailyRows.map(row => ({
+      date: new Date(row.date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }),
+      earnings: parseInt(row.deliveries, 10) * 50,
+      deliveries: parseInt(row.deliveries, 10)
+    }));
+
+    res.json({ ok: true, stats: { totalDeliveries, totalEarnings, totalPaid, walletBalance, earningsByDay } });
   } catch (err) {
     console.error('[AgentStats] Error fetching stats:', err.message);
     res.status(500).json({ error: 'Internal server error' });

@@ -91,7 +91,7 @@ export default function AgentPortalPage() {
   const [activeTab, setActiveTab] = useState('my_deliveries');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [agentStats, setAgentStats] = useState({ totalDeliveries: 0, totalEarnings: 0, walletBalance: 0, totalPaid: 0 });
+  const [agentStats, setAgentStats] = useState({ totalDeliveries: 0, totalEarnings: 0, walletBalance: 0, totalPaid: 0, earningsByDay: [] });
   const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('agentDarkMode') === 'true');
   const [podImages, setPodImages] = useState({}); // { orderId: base64String }
   const [showModifyModal, setShowModifyModal] = useState(null);
@@ -582,6 +582,22 @@ export default function AgentPortalPage() {
           <div style={{ fontSize: 12, fontWeight: 600, textTransform: 'uppercase', opacity: 0.9 }}>Wallet Balance</div>
         </div>
       </div>
+
+      {/* Day-Wise Earnings */}
+      {agentStats.earningsByDay && agentStats.earningsByDay.length > 0 && (
+        <div style={{ background: theme.accentBg, padding: '12px 20px', borderBottom: `1px solid ${theme.border}` }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: theme.subText, textTransform: 'uppercase', marginBottom: 8 }}>Recent Earnings</div>
+          <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
+            {agentStats.earningsByDay.map((day, idx) => (
+              <div key={idx} style={{ background: theme.cardBg, padding: '8px 16px', borderRadius: 8, border: `1px solid ${theme.border}`, minWidth: 100, textAlign: 'center' }}>
+                <div style={{ fontSize: 11, color: theme.subText, marginBottom: 4 }}>{day.date}</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: '#10b981' }}>₹{day.earnings}</div>
+                <div style={{ fontSize: 10, color: theme.subText }}>{day.deliveries} orders</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Main Content */}
       <div style={{ maxWidth: 600, margin: '0 auto', padding: '20px' }}>
