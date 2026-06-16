@@ -466,10 +466,10 @@ async function generateWixCheckoutUrl(items) {
          bestMatch = catalogProducts.find(p => p.name.toLowerCase().includes(baseName));
       }
       
-      if (bestMatch && bestMatch.productId) {
+      if (bestMatch && (bestMatch.productId || bestMatch.id)) {
         lineItems.push({
           catalogReference: {
-            catalogItemId: bestMatch.productId,
+            catalogItemId: bestMatch.productId || bestMatch.id,
             appId: '215238eb-22a5-4c36-9e7b-e7c08025e04e' // Wix Stores App ID
           },
           quantity: parseFloat(item.qty) || 1
