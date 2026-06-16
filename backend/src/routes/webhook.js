@@ -1331,26 +1331,26 @@ router.post('/webhook/whatsapp', async (req, res) => {
                    itemsData.push({ id: po.id, name: po.ordered_item, qty: po.quantity, lineTotal });
                  }
                  
-                 // 3. Create the ecosystem_order with Geocoding for Mapbox
+                 // 3. Create the ecosystem_order with Geocoding using unified geocodeAddress
                  const addressStr = `WhatsApp Pincode: ${pincode}`;
                  let lat = null, lng = null;
                  try {
-                   const mapboxToken = 'pk.eyJ1IjoidmFzYW50aDAyMjMiLCJhIjoiY21xOGN4a2xnMDEwMjJwczl1MGhncHV1diJ9.NhbOSrL_XOGX6AUA3-wXQA';
-                   const geoRes = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${pincode}%20India.json?access_token=${mapboxToken}&limit=1`);
-                   const geoData = await geoRes.json();
-                   if (geoData.features && geoData.features.length > 0) {
-                     lng = geoData.features[0].center[0];
-                     lat = geoData.features[0].center[1];
+                   const { geocodeAddress } = require('../services/geocoder');
+                   const geo = await geocodeAddress(pincode + ', India');
+                   if (geo) {
+                     lat = geo.lat;
+                     lng = geo.lng;
                    }
                  } catch (geoErr) {
-                   console.error('[Geocode] Failed to fetch coordinates for pincode', pincode, geoErr.message);
+                   console.error('[Geocode] Failed to geocode pincode', pincode, geoErr.message);
                  }
 
+                 const otp = Math.floor(1000 + Math.random() * 9000).toString();
                  const { rows: ecoRows } = await client.query(`
-                   INSERT INTO coexistence.ecosystem_orders (user_phone, total_price, status, address_line, lat, lng)
-                   VALUES ($1, $2, 'CREATED', $3, $4, $5)
+                   INSERT INTO coexistence.ecosystem_orders (user_phone, total_price, status, address_line, lat, lng, delivery_otp)
+                   VALUES ($1, $2, 'CREATED', $3, $4, $5, $6)
                    RETURNING id
-                 `, [r.contact_number, totalPrice, addressStr, lat, lng]);
+                 `, [r.contact_number, totalPrice, addressStr, lat, lng, otp]);
                  const ecoOrderId = ecoRows[0].id;
                  
                  // 4. Insert items
@@ -1365,9 +1365,9 @@ router.post('/webhook/whatsapp', async (req, res) => {
                  const idsToConvert = itemsData.map(i => i.id);
                  await client.query(`
                    UPDATE coexistence.meenzy_preorders 
-                   SET order_status = 'CONVERTED', address_line = $1
+                   SET order_status = 'CONVERTED', address_line = $1, otp = $3
                    WHERE id = ANY($2::bigint[])
-                 `, [addressStr, idsToConvert]);
+                 `, [addressStr, idsToConvert, otp]);
                  
                  updatedCount += preorders.length;
                }
@@ -1978,12 +1978,13 @@ router.post('/webhook/wix-order', async (req, res) => {
     const lat = geo ? geo.lat : null;
     const lng = geo ? geo.lng : null;
 
-    // 4. Save to Database
+    // 4. Save to Database with newly generated OTP
+    const otp = Math.floor(1000 + Math.random() * 9000).toString();
     const { rows: savedOrder } = await client.query(`
-      INSERT INTO coexistence.ecosystem_orders (wix_order_id, user_phone, total_price, status, address_line, lat, lng)
-      VALUES ($1, $2, $3, 'CREATED', $4, $5, $6)
+      INSERT INTO coexistence.ecosystem_orders (wix_order_id, user_phone, total_price, status, address_line, lat, lng, delivery_otp)
+      VALUES ($1, $2, $3, 'CREATED', $4, $5, $6, $7)
       RETURNING id
-    `, [String(orderId), String(phone), total, addressLine, lat, lng]);
+    `, [String(orderId), String(phone), total, addressLine, lat, lng, otp]);
 
     const internalOrderId = savedOrder[0].id;
 
@@ -1998,11 +1999,11 @@ router.post('/webhook/wix-order', async (req, res) => {
         VALUES ($1, $2, $3, $4)
       `, [internalOrderId, name, qty, price]);
 
-      // Sync to Preorders page
+      // Sync to Preorders page with OTP
       await client.query(`
-        INSERT INTO coexistence.meenzy_preorders (customer_phone, ordered_item, quantity, order_status)
-        VALUES ($1, $2, $3, 'pending_market')
-      `, [String(phone).replace(/\D/g, ''), name, qty]);
+        INSERT INTO coexistence.meenzy_preorders (customer_phone, ordered_item, quantity, order_status, otp)
+        VALUES ($1, $2, $3, 'pending_market', $4)
+      `, [String(phone).replace(/\D/g, ''), name, qty, otp]);
 
       itemsSummary.push(`• *${name}* x${qty} - ₹${price}`);
     }

@@ -204,7 +204,7 @@ router.put('/:agentId/orders/:orderId/verify-delivery', verifyAgent, async (req,
 
     assertOrderTransition(order.status, 'DELIVERED');
 
-    if (order.delivery_otp && String(order.delivery_otp).trim() !== String(otp).trim()) {
+    if (!order.delivery_otp || String(order.delivery_otp).trim() !== String(otp).trim()) {
       throw new Error('Invalid OTP provided');
     }
 

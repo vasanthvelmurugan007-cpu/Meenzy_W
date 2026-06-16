@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, Alert, Linking } from 'react-native';
 import Mapbox from '@rnmapbox/maps';
 Mapbox.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN);
 import * as SecureStore from 'expo-secure-store';
 import { useIsFocused } from '@react-navigation/native';
+import * as Location from 'expo-location';
 import { portalAPI } from '../api';
 import { startBackgroundLocation } from '../services/LocationService';
 import { Navigation, Phone, CheckCircle, Package } from 'lucide-react-native';
@@ -12,6 +13,7 @@ export default function HomeScreen({ navigation }) {
   const [orders, setOrders] = useState([]);
   const [agent, setAgent] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [optimizing, setOptimizing] = useState(false);
   const isFocused = useIsFocused();
 
   useEffect(() => {
@@ -35,8 +37,94 @@ export default function HomeScreen({ navigation }) {
       }
     } catch (err) {
       console.error(err);
+      if (err.response?.status === 401 || err.message?.includes('401')) {
+        Alert.alert('Session Expired', 'Please log in again.');
+        await SecureStore.deleteItemAsync('agentToken');
+        await SecureStore.deleteItemAsync('agentData');
+        navigation.replace('Login');
+      }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleOptimizeRoute = async () => {
+    if (orders.length < 2) return;
+    setOptimizing(true);
+    try {
+      let currentLat = null;
+      let currentLng = null;
+      try {
+        const loc = await Location.getLastKnownPositionAsync({});
+        if (loc) {
+          currentLat = loc.coords.latitude;
+          currentLng = loc.coords.longitude;
+        }
+      } catch (locErr) {
+        console.warn('Failed to get location for optimization', locErr);
+      }
+
+      const res = await portalAPI.optimizeRoute(agent.id, {
+        currentLat,
+        currentLng,
+        orders
+      });
+
+      if (res.data && res.data.ok && res.data.sequence) {
+        const sequence = res.data.sequence;
+        const sorted = [...orders].sort((a, b) => {
+          const idxA = sequence.indexOf(a.id);
+          const idxB = sequence.indexOf(b.id);
+          return (idxA === -1 ? 999 : idxA) - (idxB === -1 ? 999 : idxB);
+        });
+        setOrders(sorted);
+        Alert.alert('Route Optimized', 'AI has successfully optimized your delivery sequence!');
+      } else {
+        Alert.alert('Optimization Failed', 'Could not optimize delivery sequence.');
+      }
+    } catch (err) {
+      console.error(err);
+      Alert.alert('Error', 'An error occurred during route optimization.');
+    } finally {
+      setOptimizing(false);
+    }
+  };
+
+  const handleStartRoute = async () => {
+    if (orders.length === 0) return;
+    setOptimizing(true);
+    try {
+      let currentLat = null;
+      let currentLng = null;
+      try {
+        const loc = await Location.getLastKnownPositionAsync({});
+        if (loc) {
+          currentLat = loc.coords.latitude;
+          currentLng = loc.coords.longitude;
+        }
+      } catch (locErr) {
+        console.warn('Failed to get location for route', locErr);
+      }
+
+      try {
+        await portalAPI.startRoute(agent.id, { orders });
+      } catch (err) {
+        console.error('Failed to trigger WhatsApp templates on route start:', err);
+      }
+
+      const lastOrder = orders[orders.length - 1];
+      const destination = lastOrder.lat && lastOrder.lng ? `&destination=${lastOrder.lat},${lastOrder.lng}` : '';
+      const origin = currentLat && currentLng ? `&origin=${currentLat},${currentLng}` : '';
+      const waypoints = orders.slice(0, -1).filter(o => o.lat && o.lng).map(o => `${o.lat},${o.lng}`).join('|');
+      
+      const googleMapsUrl = `https://www.google.com/maps/dir/?api=1${origin}${destination}${waypoints ? `&waypoints=${waypoints}` : ''}`;
+      
+      await Linking.openURL(googleMapsUrl);
+    } catch (err) {
+      console.error(err);
+      Alert.alert('Error', 'Could not open navigation map.');
+    } finally {
+      setOptimizing(false);
     }
   };
 
@@ -66,6 +154,27 @@ export default function HomeScreen({ navigation }) {
 
       <View style={styles.bottomSheet}>
         <Text style={styles.sheetTitle}>My Deliveries ({orders.length})</Text>
+
+        {orders.length > 0 && (
+          <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
+            <TouchableOpacity 
+              style={[styles.actionBtn, { backgroundColor: '#8b5cf6' }]} 
+              onPress={handleOptimizeRoute}
+              disabled={optimizing}
+            >
+              <Text style={styles.actionBtnText}>{optimizing ? 'Analyzing...' : 'Optimize'}</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={[styles.actionBtn, { backgroundColor: '#3b82f6' }]} 
+              onPress={handleStartRoute}
+              disabled={optimizing}
+            >
+              <Text style={styles.actionBtnText}>Start driving</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         <FlatList
           data={orders}
           keyExtractor={o => o.id}
@@ -113,5 +222,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 8,
   },
-  btnText: { color: '#fff', marginLeft: 8, fontWeight: '700', fontSize: 14 }
+  btnText: { color: '#fff', marginLeft: 8, fontWeight: '700', fontSize: 14 },
+  actionBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 1.41,
+    elevation: 2,
+  },
+  actionBtnText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 14,
+  }
 });

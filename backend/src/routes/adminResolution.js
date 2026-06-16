@@ -370,7 +370,7 @@ router.put('/:id/verify-delivery', async (req, res) => {
 
     assertOrderTransition(order.status, 'DELIVERED');
 
-    if (order.delivery_otp && order.delivery_otp !== otp) {
+    if (!order.delivery_otp || String(order.delivery_otp).trim() !== String(otp).trim()) {
       throw new Error('Invalid OTP provided');
     }
 

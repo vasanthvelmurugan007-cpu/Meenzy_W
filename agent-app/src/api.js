@@ -28,4 +28,5 @@ export const portalAPI = {
   updateLocation: (agentId, lat, lng) => api.put(`/agent-portal/${agentId}/location`, { lat, lng }),
   verifyDelivery: (agentId, orderId, otp, podImage) => api.put(`/agent-portal/${agentId}/orders/${orderId}/verify-delivery`, { otp, podImage }),
   optimizeRoute: (agentId, data) => api.post(`/agent-portal/${agentId}/optimize-route`, data),
+  startRoute: (agentId, data) => api.post(`/agent-portal/${agentId}/start-route`, data),
 };
