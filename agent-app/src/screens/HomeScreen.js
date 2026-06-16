@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, FlatList } from 'react-native
 import Mapbox from '@rnmapbox/maps';
 Mapbox.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN);
 import * as SecureStore from 'expo-secure-store';
+import { useIsFocused } from '@react-navigation/native';
 import { portalAPI } from '../api';
 import { startBackgroundLocation } from '../services/LocationService';
 import { Navigation, Phone, CheckCircle, Package } from 'lucide-react-native';
@@ -11,9 +12,15 @@ export default function HomeScreen({ navigation }) {
   const [orders, setOrders] = useState([]);
   const [agent, setAgent] = useState(null);
   const [loading, setLoading] = useState(true);
+  const isFocused = useIsFocused();
 
   useEffect(() => {
-    loadData();
+    if (isFocused) {
+      loadData();
+    }
+  }, [isFocused]);
+
+  useEffect(() => {
     startBackgroundLocation();
   }, []);
 

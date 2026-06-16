@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, TextInput } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { portalAPI } from '../api';
 import * as SecureStore from 'expo-secure-store';
@@ -9,6 +9,7 @@ export default function DeliveryCameraScreen({ route, navigation }) {
   const [permission, requestPermission] = useCameraPermissions();
   const [photo, setPhoto] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [otp, setOtp] = useState('');
   const cameraRef = useRef(null);
 
   if (!permission) return <View />;
@@ -31,13 +32,16 @@ export default function DeliveryCameraScreen({ route, navigation }) {
   };
 
   const uploadPOD = async () => {
+    if (!otp || otp.trim().length !== 4) {
+      Alert.alert('Error', 'Please enter a valid 4-digit OTP');
+      return;
+    }
     setUploading(true);
     try {
       const agentDataStr = await SecureStore.getItemAsync('agentData');
       const agent = JSON.parse(agentDataStr);
       
-      // Assume OTP verified already for this demo, just uploading POD to complete
-      await portalAPI.verifyDelivery(agent.id, orderId, '1234', `data:image/jpeg;base64,${photo.base64}`);
+      await portalAPI.verifyDelivery(agent.id, orderId, otp.trim(), `data:image/jpeg;base64,${photo.base64}`);
       
       Alert.alert('Success', 'Delivery completed and POD uploaded!');
       navigation.goBack();
@@ -59,11 +63,26 @@ export default function DeliveryCameraScreen({ route, navigation }) {
       ) : (
         <View style={styles.previewContainer}>
           <Text style={styles.title}>Proof of Delivery Captured</Text>
+          
+          <TextInput
+            style={styles.input}
+            placeholder="Enter 4-Digit OTP"
+            placeholderTextColor="#9ca3af"
+            value={otp}
+            onChangeText={setOtp}
+            keyboardType="number-pad"
+            maxLength={4}
+          />
+
           <View style={styles.actions}>
-            <TouchableOpacity style={[styles.btn, { backgroundColor: '#ef4444' }]} onPress={() => setPhoto(null)}>
+            <TouchableOpacity style={[styles.btn, { backgroundColor: '#ef4444' }]} onPress={() => { setPhoto(null); setOtp(''); }}>
               <Text style={styles.btnText}>Retake</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.btn, { backgroundColor: '#10b981' }]} onPress={uploadPOD} disabled={uploading}>
+            <TouchableOpacity 
+              style={[styles.btn, { backgroundColor: '#10b981' }, (uploading || otp.trim().length !== 4) && { opacity: 0.5 }]} 
+              onPress={uploadPOD} 
+              disabled={uploading || otp.trim().length !== 4}
+            >
               <Text style={styles.btnText}>{uploading ? 'Uploading...' : 'Confirm Delivery'}</Text>
             </TouchableOpacity>
           </View>
@@ -99,6 +118,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   title: { fontSize: 20, fontWeight: 'bold', marginBottom: 20 },
+  input: {
+    width: '80%',
+    height: 50,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    fontSize: 18,
+    textAlign: 'center',
+    marginBottom: 20,
+    color: '#1f2937',
+    backgroundColor: '#f9fafb',
+  },
   actions: { flexDirection: 'row', gap: 20 },
   btn: { padding: 16, borderRadius: 8, alignItems: 'center', minWidth: 120 },
   btnText: { color: '#fff', fontWeight: 'bold' }
