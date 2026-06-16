@@ -364,81 +364,44 @@ router.post('/:agentId/optimize-route', verifyAgent, async (req, res) => {
   }
 
   try {
-    const groqKey = process.env.GROQ_API_KEY;
-    if (!groqKey) {
-      console.warn('[optimize-route] Missing GROQ_API_KEY. Returning unoptimized sequence.');
-      return res.json({ ok: true, sequence: orders.map(o => o.id) });
-    }
+    const startLat = currentLat ? parseFloat(currentLat) : (validOrders.length > 0 ? parseFloat(validOrders[0].lat) : 13.123565);
+    const startLng = currentLng ? parseFloat(currentLng) : (validOrders.length > 0 ? parseFloat(validOrders[0].lng) : 80.291771);
 
-    const startLat = currentLat ? parseFloat(currentLat) : null;
-    const startLng = currentLng ? parseFloat(currentLng) : null;
-    const startText = startLat && startLng ? `Agent is starting at coordinates Lat: ${startLat}, Lng: ${startLng}` : "Agent is starting at the first order's location.";
+    // Mathematical Nearest Neighbor (Greedy) Algorithm
+    // This perfectly satisfies the rule: "Find closest to agent, then closest to that point, etc."
+    let unvisited = [...validOrders];
+    const finalOptimized = [];
+    
+    let currentPoint = { lat: startLat, lng: startLng };
 
-    const orderListText = validOrders.map(o => `- ID: "${o.id}", Address: "${o.address_line}", Lat: ${o.lat}, Lng: ${o.lng}`).join('\n');
+    while (unvisited.length > 0) {
+      let nearestIdx = -1;
+      let minDistance = Infinity;
 
-    const prompt = `You are a hyperlocal delivery logistics AI.
-Your task is to find the mathematically shortest and most logical delivery sequence for the following orders. Group them logically by neighborhood and minimize driving distance.
-${startText}
-
-Orders:
-${orderListText}
-
-Output ONLY a JSON array of strings containing the exact order IDs in the optimal delivery sequence. Do not include any other text, explanation, or markdown formatting (e.g., no \`\`\`json). Just the array.
-Example: ["id1", "id2", "id3"]`;
-
-    try {
-      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${groqKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: 'llama-3.3-70b-versatile',
-          messages: [{ role: 'user', content: prompt }],
-          temperature: 0.1
-        })
-      });
-
-      const data = await response.json();
-      
-      if (!response.ok) {
-        console.error('[Groq Error]', data);
-        return res.json({ ok: true, sequence: orders.map(o => o.id) });
-      }
-
-      let aiResponse = data.choices?.[0]?.message?.content || '[]';
-      
-      // Clean up markdown if the AI mistakenly included it
-      aiResponse = aiResponse.replace(/```json/g, '').replace(/```/g, '').trim();
-
-      let optimizedSequence = [];
-      try {
-        optimizedSequence = JSON.parse(aiResponse);
-      } catch (parseErr) {
-        console.error('[Groq JSON Parse Error]', aiResponse);
-        optimizedSequence = validOrders.map(o => o.id);
-      }
-
-      // Ensure all valid orders are in the sequence and no hallucinated IDs are there
-      const finalOptimized = [];
-      for (const id of optimizedSequence) {
-        if (validOrders.find(o => o.id === id)) {
-          finalOptimized.push(id);
-        }
-      }
-      for (const o of validOrders) {
-        if (!finalOptimized.includes(o.id)) {
-          finalOptimized.push(o.id);
+      for (let i = 0; i < unvisited.length; i++) {
+        const order = unvisited[i];
+        // Squared Euclidean distance is perfectly sufficient for relative proximity comparison
+        const dist = Math.pow(currentPoint.lat - parseFloat(order.lat), 2) + Math.pow(currentPoint.lng - parseFloat(order.lng), 2);
+        
+        if (dist < minDistance) {
+          minDistance = dist;
+          nearestIdx = i;
         }
       }
 
-      const finalSequence = [...finalOptimized, ...missingOrders];
-      res.json({ ok: true, sequence: finalSequence });
-    } catch (apiErr) {
-      console.error('[Groq API Error]', apiErr);
-      res.json({ ok: true, sequence: orders.map(o => o.id) });
+      // Add the nearest order to the sequence
+      const nearestOrder = unvisited[nearestIdx];
+      finalOptimized.push(nearestOrder.id);
+      
+      // Update current point to this order's location for the next iteration
+      currentPoint = { lat: parseFloat(nearestOrder.lat), lng: parseFloat(nearestOrder.lng) };
+      
+      // Remove from unvisited list
+      unvisited.splice(nearestIdx, 1);
     }
+
+    const finalSequence = [...finalOptimized, ...missingOrders];
+    res.json({ ok: true, sequence: finalSequence });
   } catch (err) {
     console.error('[Mapbox Optimize Error]', err.message);
     // Fallback to unoptimized sequence if something crashes
