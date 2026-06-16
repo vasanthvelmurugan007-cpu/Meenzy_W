@@ -21,6 +21,15 @@ router.get('/meenzy/dashboard/stats', async (req, res) => {
       SELECT COUNT(*) as count 
       FROM coexistence.meenzy_delivery_agents
     `);
+
+    const { rows: revenueStats } = await pool.query(`
+      SELECT 
+        COALESCE(SUM(p.quantity * c.price_in_inr), 0) as today_revenue, 
+        COALESCE(SUM(p.quantity), 0) as today_sales_kg
+      FROM coexistence.meenzy_preorders p
+      LEFT JOIN coexistence.meenzy_catalog c ON p.ordered_item = c.item_name
+      WHERE DATE(p.created_at) = CURRENT_DATE AND p.order_status != 'CANCELLED'
+    `);
     
     const { rows: topItems } = await pool.query(`
       SELECT ordered_item, SUM(quantity) as total_qty
@@ -53,6 +62,8 @@ router.get('/meenzy/dashboard/stats', async (req, res) => {
       todayOrders: parseInt(todayOrders[0].count) || 0,
       activeDeliveries: parseInt(activeDeliveries[0].count) || 0,
       activeDrivers: parseInt(drivers[0].count) || 0,
+      todayRevenue: parseInt(revenueStats[0].today_revenue) || 0,
+      todaySalesKg: parseFloat(revenueStats[0].today_sales_kg) || 0,
       topItems,
       recentOrders,
       pincodeStats

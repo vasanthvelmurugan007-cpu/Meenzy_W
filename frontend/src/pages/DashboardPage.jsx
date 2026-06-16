@@ -82,7 +82,23 @@ export default function DashboardPage({ user, onPageChange }) {
         
         <div className="spring-pop hover-lift" style={{ background: C.cardBg, padding: 20, borderRadius: 16, border: `1px solid ${C.border}`, boxShadow: C.shadowSm }}>
           <div style={{ color: C.textSecondary, fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, fontWeight: 600 }}>
+            <TrendingUp size={16} color="#10b981" />
+            Today's Revenue
+          </div>
+          <div style={{ fontSize: 32, fontWeight: 800, color: '#10b981' }}>₹{stats.todayRevenue}</div>
+        </div>
+
+        <div className="spring-pop hover-lift" style={{ background: C.cardBg, padding: 20, borderRadius: 16, border: `1px solid ${C.border}`, boxShadow: C.shadowSm }}>
+          <div style={{ color: C.textSecondary, fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, fontWeight: 600 }}>
             <Package size={16} color={C.amber} />
+            Fish Sold Today
+          </div>
+          <div style={{ fontSize: 32, fontWeight: 800, color: C.text }}>{stats.todaySalesKg} <span style={{ fontSize: 16, fontWeight: 600, color: C.textMuted }}>kg</span></div>
+        </div>
+        
+        <div className="spring-pop hover-lift" style={{ background: C.cardBg, padding: 20, borderRadius: 16, border: `1px solid ${C.border}`, boxShadow: C.shadowSm }}>
+          <div style={{ color: C.textSecondary, fontSize: 13, display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, fontWeight: 600 }}>
+            <Package size={16} color="#8b5cf6" />
             Active Deliveries
           </div>
           <div style={{ fontSize: 32, fontWeight: 800, color: C.text }}>{stats.activeDeliveries}</div>
