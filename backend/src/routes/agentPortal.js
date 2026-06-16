@@ -378,64 +378,78 @@ router.post('/:agentId/optimize-route', verifyAgent, async (req, res) => {
       }))
     ];
 
-    if (locations.length > 120) {
-       console.warn('[optimize-route] Mapbox limits exceed 120 coords. Truncating for optimization.');
-       locations.splice(120);
-    }
-
-    // Mapbox Format: lng,lat
-    const coordinateString = locations.map(loc => `${loc.lng},${loc.lat}`).join(';');
+    // Mapbox Optimization API limit is 12 coordinates per request.
+    // We chunk validOrders into batches of 11 (+1 for the hub/start point).
+    let optimizedSequence = [];
+    let currentStartLat = startLat;
+    let currentStartLng = startLng;
     
-    // Mapbox parameters
-    const sourceParam = 'first'; // Start at Kasimedu Hub
-    const destinationParam = 'any'; // End at the last optimal drop-off
-    const isRoundTrip = 'true'; // MUST be true for destination=any to be supported!
+    // Create a mutable copy of validOrders
+    const pendingOrders = [...validOrders];
 
-    const url = `https://api.mapbox.com/optimized-trips/v1/mapbox/driving/${coordinateString}?source=${sourceParam}&destination=${destinationParam}&roundtrip=${isRoundTrip}&access_token=${process.env.MAPBOX_ACCESS_TOKEN}`;
-
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
-    });
-
-    const data = await response.json();
-
-    if (!response.ok || data.code !== 'Ok') {
-      console.error(`[Mapbox Error] ${response.status}: ${data.message || JSON.stringify(data)}`);
-      return res.json({ ok: true, sequence: orders.map(o => o.id) }); // Fallback
-    }
-
-    // Create an array to hold the sorted locations
-    const sortedLocations = new Array(locations.length);
-    
-    data.waypoints.forEach((waypoint, originalIndex) => {
-        sortedLocations[waypoint.waypoint_index] = locations[originalIndex];
-    });
-
-    // Extract just the order IDs, excluding the 'hub'
-    let optimizedSequence = sortedLocations
-      .filter(loc => loc && loc.id !== 'hub')
-      .map(loc => loc.id);
-
-    // FIX FOR MAPBOX ROUNDTRIP ANOMALY:
-    // Mapbox destination=any forces roundtrip=true, creating a closed loop.
-    // The loop can go clockwise or counterclockwise, sometimes making the FAR point the first stop.
-    // We check if the LAST point in the sequence is actually closer to the Hub than the FIRST point.
-    // If it is, we reverse the array so the driver visits the nearest point first!
-    if (optimizedSequence.length > 1) {
-      const firstId = optimizedSequence[0];
-      const lastId = optimizedSequence[optimizedSequence.length - 1];
+    while (pendingOrders.length > 0) {
+      const batchOrders = pendingOrders.splice(0, 11); // Take up to 11 orders
+      const hub = { id: 'hub', lat: currentStartLat, lng: currentStartLng };
       
-      const firstLoc = validOrders.find(o => o.id === firstId);
-      const lastLoc = validOrders.find(o => o.id === lastId);
-      
-      if (firstLoc && lastLoc) {
-        // Simple distance formula (Euclidean is fine for this comparison)
-        const distToFirst = Math.pow(startLat - parseFloat(firstLoc.lat), 2) + Math.pow(startLng - parseFloat(firstLoc.lng), 2);
-        const distToLast = Math.pow(startLat - parseFloat(lastLoc.lat), 2) + Math.pow(startLng - parseFloat(lastLoc.lng), 2);
+      const locations = [
+        hub,
+        ...batchOrders.map(o => ({
+          id: o.id,
+          lat: parseFloat(o.lat),
+          lng: parseFloat(o.lng)
+        }))
+      ];
+
+      const coordinateString = locations.map(loc => `${loc.lng},${loc.lat}`).join(';');
+      const url = `https://api.mapbox.com/optimized-trips/v1/mapbox/driving/${coordinateString}?source=first&destination=any&roundtrip=true&access_token=${process.env.MAPBOX_ACCESS_TOKEN}`;
+
+      const response = await fetch(url, { method: 'GET', headers: { 'Content-Type': 'application/json' } });
+      const data = await response.json();
+
+      if (!response.ok || data.code !== 'Ok') {
+        console.error(`[Mapbox Error] ${response.status}: ${data.message || JSON.stringify(data)}`);
+        // Fallback: append the rest unoptimized
+        optimizedSequence.push(...batchOrders.map(o => o.id));
+        optimizedSequence.push(...pendingOrders.map(o => o.id));
+        break;
+      }
+
+      const sortedLocations = new Array(locations.length);
+      data.waypoints.forEach((waypoint, originalIndex) => {
+          sortedLocations[waypoint.waypoint_index] = locations[originalIndex];
+      });
+
+      let batchSequence = sortedLocations
+        .filter(loc => loc && loc.id !== 'hub')
+        .map(loc => loc.id);
+
+      // Mapbox roundtrip anomaly fix for this batch
+      if (batchSequence.length > 1) {
+        const firstId = batchSequence[0];
+        const lastId = batchSequence[batchSequence.length - 1];
         
-        if (distToLast < distToFirst) {
-           optimizedSequence.reverse();
+        const firstLoc = batchOrders.find(o => o.id === firstId);
+        const lastLoc = batchOrders.find(o => o.id === lastId);
+        
+        if (firstLoc && lastLoc) {
+          const distToFirst = Math.pow(currentStartLat - parseFloat(firstLoc.lat), 2) + Math.pow(currentStartLng - parseFloat(firstLoc.lng), 2);
+          const distToLast = Math.pow(currentStartLat - parseFloat(lastLoc.lat), 2) + Math.pow(currentStartLng - parseFloat(lastLoc.lng), 2);
+          
+          if (distToLast < distToFirst) {
+             batchSequence.reverse();
+          }
+        }
+      }
+
+      optimizedSequence.push(...batchSequence);
+
+      // Set the last order of this batch as the start location for the next batch
+      if (batchSequence.length > 0) {
+        const lastOrderId = batchSequence[batchSequence.length - 1];
+        const lastOrder = batchOrders.find(o => o.id === lastOrderId);
+        if (lastOrder) {
+          currentStartLat = parseFloat(lastOrder.lat);
+          currentStartLng = parseFloat(lastOrder.lng);
         }
       }
     }
