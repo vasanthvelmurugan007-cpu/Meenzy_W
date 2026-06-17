@@ -2029,7 +2029,8 @@ router.post('/webhook/wix-order', async (req, res) => {
 
     // 6. Send WhatsApp Confirmation
     const trackingPhone = String(phone).replace(/\D/g, '').slice(-4);
-    const trackingLink = `${process.env.CORS_ORIGIN}/#/track/${orderId}?phone=${trackingPhone}`;
+    const trackingLink = `${process.env.CORS_ORIGIN || 'https://meenzy-frontend.onrender.com'}/#/track/${orderId}?phone=${trackingPhone}`;
+
 
     const messageText = `Thank you for your order! 🌊 (Order #${orderId})\n\nBecause we source our seafood fresh daily, your order is currently marked as a *Preorder*.\n\n*Requested Items:*\n${itemsSummary.join('\n')}\n\n💵 *Total:* ₹${total}\n\nYour order has been registered. We will check for the availability and then we will send you the confirmation message soon!\n\n📍 *Track your order live:*\n${trackingLink}`;
 
