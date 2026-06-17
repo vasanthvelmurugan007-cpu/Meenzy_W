@@ -1924,7 +1924,7 @@ router.post('/webhook/wix-order', async (req, res) => {
     console.log('[wix-order-webhook] Received order webhook:', JSON.stringify(payload, null, 2));
 
     const order = payload.order || payload.data?.order || payload.data || payload;
-    const orderId = order.id || order.orderId || order.number;
+    const orderId = order.id || order.orderId || order.orderNumber || order.number || payload.orderId || payload.id || payload.orderNumber;
 
     if (!orderId) {
       return res.status(400).json({ error: 'Missing order ID in payload' });
@@ -1946,7 +1946,13 @@ router.post('/webhook/wix-order', async (req, res) => {
     }
 
     // 3. Extract Order Details
-    let phone = order.billingInfo?.contactDetails?.phone || order.billingInfo?.phone || order.buyerInfo?.phone || order.customerPhone || payload.phone;
+    let phone = order.billingInfo?.contactDetails?.phone || 
+                order.billingInfo?.phone || 
+                order.buyerInfo?.phone || 
+                order.customerPhone || 
+                order.shippingInfo?.logistics?.shippingDestination?.contactDetails?.phone ||
+                (order.contact?.phones && order.contact.phones[0]?.phone) ||
+                payload.phone;
     if (!phone) {
       await client.query('ROLLBACK');
       console.error('[wix-order-webhook] No phone number found in payload.');

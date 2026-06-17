@@ -40,54 +40,86 @@ function getSlotsForOffset(offset) {
   ];
 }
 
+function getDaysDifference(date1, date2) {
+  const d1 = new Date(date1.getFullYear(), date1.getMonth(), date1.getDate());
+  const d2 = new Date(date2.getFullYear(), date2.getMonth(), date2.getDate());
+  const diffTime = d2 - d1;
+  return Math.round(diffTime / (1000 * 60 * 60 * 24));
+}
+
 function getDeliveryPayload() {
   const localNow = module.exports.getKolkataTime();
   const hours = localNow.getHours();
   const minutes = localNow.getMinutes();
   
-  const isPastCutoff = (hours > 23) || (hours === 23 && minutes >= 55);
+  const isPastCutoff = (hours > 23) || (hours === 23 && minutes >= 59);
   const isPastEveningDelivery = (hours >= 19); // Past 7:00 PM
   
-  const sections = [];
+  const baseStartOffset = isPastCutoff ? 2 : (isPastEveningDelivery ? 1 : 0);
   
-  if (isPastCutoff) {
-    // After 11:55 PM: Tuesday is closed. Show Wednesday (offset 2) and Thursday (offset 3)
-    sections.push({
-      title: getDateName(2),
-      rows: getSlotsForOffset(2)
-    });
-    sections.push({
-      title: getDateName(3),
-      rows: getSlotsForOffset(3)
-    });
-  } else if (isPastEveningDelivery) {
-    // Past 7:00 PM: Today is gone. Show Tomorrow (offset 1) and Day After Tomorrow (offset 2)
-    sections.push({
-      title: getDateName(1),
-      rows: getSlotsForOffset(1)
-    });
-    sections.push({
-      title: getDateName(2),
-      rows: getSlotsForOffset(2)
-    });
-  } else {
-    // Normal: Show Today (offset 0, evening only) and Tomorrow (offset 1, all slots)
-    sections.push({
-      title: getDateName(0),
-      rows: getSlotsForOffset(0)
-    });
-    sections.push({
-      title: getDateName(1),
-      rows: getSlotsForOffset(1)
+  const launchDate = new Date("2026-06-21T00:00:00+05:30");
+  const launchOffset = getDaysDifference(localNow, launchDate);
+  const startOffset = Math.max(baseStartOffset, launchOffset);
+  
+  const rows = [];
+  for (let i = 0; i < 7; i++) {
+    const currentOffset = startOffset + i;
+    const dateTitle = getDateName(currentOffset);
+    rows.push({
+      id: `C_DATE:${currentOffset}`,
+      title: dateTitle,
+      description: `Select to view delivery slots for ${dateTitle}`
     });
   }
   
   return {
     type: "list",
-    body: { text: "📅 When would you like your order delivered? Please select a date and time slot below:" },
+    body: { text: "📅 When would you like your order delivered? Please select a date below:" },
     action: {
-      button: "Select Schedule",
-      sections: sections
+      button: "Select Date",
+      sections: [
+        {
+          title: "Available Dates",
+          rows: rows
+        }
+      ]
+    }
+  };
+}
+
+function getSlotsPayloadForDate(offset) {
+  const targetDate = module.exports.getKolkataTime();
+  targetDate.setDate(targetDate.getDate() + offset);
+  
+  const dateTitle = getDateName(offset);
+  const slots = getSlotsForOffset(offset);
+  
+  const buttons = slots.map(slot => {
+    let btnTitle = slot.title;
+    if (btnTitle.toLowerCase().includes('morning')) {
+      btnTitle = 'Morning 🌅';
+    } else if (btnTitle.toLowerCase().includes('mid-day')) {
+      btnTitle = 'Mid-Day ☀️';
+    } else if (btnTitle.toLowerCase().includes('evening')) {
+      btnTitle = 'Evening 🌇';
+    }
+    
+    return {
+      type: "reply",
+      reply: {
+        id: slot.id,
+        title: btnTitle
+      }
+    };
+  });
+  
+  return {
+    type: "button",
+    body: {
+      text: `📅 *Select delivery time slot for ${dateTitle}:*`
+    },
+    action: {
+      buttons: buttons
     }
   };
 }
@@ -96,7 +128,7 @@ function getTomorrowMorningSlot() {
   const localNow = module.exports.getKolkataTime();
   const hours = localNow.getHours();
   const minutes = localNow.getMinutes();
-  const isPastCutoff = (hours > 23) || (hours === 23 && minutes >= 55);
+  const isPastCutoff = (hours > 23) || (hours === 23 && minutes >= 59);
 
   const targetDate = new Date(localNow);
   if (isPastCutoff) {
@@ -114,6 +146,7 @@ function getTomorrowMorningSlot() {
 
 module.exports = {
   getDeliveryPayload,
+  getSlotsPayloadForDate,
   getTomorrowMorningSlot,
   getKolkataTime
 };

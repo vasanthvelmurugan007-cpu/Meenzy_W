@@ -303,6 +303,23 @@ async function handleCartState(whatsappId, account, incomingPayload) {
     return true; // handled
   }
 
+  // Handle Delivery Date Selection
+  if (incomingPayload.startsWith('C_DATE:')) {
+    const parts = incomingPayload.split(':');
+    if (parts.length >= 2) {
+      const dateOffset = parseInt(parts[1], 10) || 0;
+      
+      const context = cart.state_context || {};
+      context.selected_delivery_offset = dateOffset;
+      await updateCartState(whatsappId, 'AWAITING_DELIVERY_SLOT', context);
+      
+      const { getSlotsPayloadForDate } = require('../services/deliveryScheduler');
+      const slotsPayload = getSlotsPayloadForDate(dateOffset);
+      await sendMessage(whatsappId, account, slotsPayload, 'Select Delivery Slot');
+    }
+    return true; // handled
+  }
+
   // Handle Delivery Schedule
   if (incomingPayload.startsWith('C_DEL:')) {
     const parts = incomingPayload.split(':');
