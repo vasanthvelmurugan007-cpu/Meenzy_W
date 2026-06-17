@@ -1927,7 +1927,8 @@ router.post('/webhook/wix-order', async (req, res) => {
     const orderId = order.id || order.orderId || order.orderNumber || order.number || payload.orderId || payload.id || payload.orderNumber;
 
     if (!orderId) {
-      return res.status(400).json({ error: 'Missing order ID in payload' });
+      console.log('[wix-order-webhook] Missing order ID in payload. Responding 200 OK for verification/test compatibility.');
+      return res.status(200).json({ ok: true, message: 'Handled (no order ID present)' });
     }
 
     client = await pool.connect();
@@ -1955,8 +1956,9 @@ router.post('/webhook/wix-order', async (req, res) => {
                 payload.phone;
     if (!phone) {
       await client.query('ROLLBACK');
-      console.error('[wix-order-webhook] No phone number found in payload.');
-      return res.status(400).json({ error: 'No phone number found' });
+      client.release();
+      console.log('[wix-order-webhook] No phone number found in payload. Responding 200 OK for verification/test compatibility.');
+      return res.status(200).json({ ok: true, message: 'Handled (no phone number found)' });
     }
 
     // Normalize phone number to standard international format (assuming Indian +91 if ambiguous)
