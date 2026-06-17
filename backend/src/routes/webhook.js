@@ -1946,14 +1946,28 @@ router.post('/webhook/wix-order', async (req, res) => {
       return res.json({ ok: true, message: 'Already processed' });
     }
 
-    // 3. Extract Order Details
-    let phone = order.billingInfo?.contactDetails?.phone || 
-                order.billingInfo?.phone || 
-                order.buyerInfo?.phone || 
-                order.customerPhone || 
-                order.shippingInfo?.logistics?.shippingDestination?.contactDetails?.phone ||
-                (order.contact?.phones && order.contact.phones[0]?.phone) ||
-                payload.phone;
+    // 3. Extract Order Details — check all known Wix phone paths
+    const phoneChecks = {
+      'billingInfo.contactDetails.phone': order.billingInfo?.contactDetails?.phone,
+      'billingInfo.phone': order.billingInfo?.phone,
+      'buyerInfo.phone': order.buyerInfo?.phone,
+      'customerPhone': order.customerPhone,
+      'shippingInfo.logistics.shippingDestination.contactDetails.phone': order.shippingInfo?.logistics?.shippingDestination?.contactDetails?.phone,
+      'contact.phones[0].phone': (order.contact?.phones && order.contact.phones[0]?.phone),
+      'contact.phone': order.contact?.phone,
+      'buyerInfo.contactDetails.phone': order.buyerInfo?.contactDetails?.phone,
+      'payload.phone': payload.phone,
+    };
+    console.log('[wix-order-webhook] Phone field scan:', JSON.stringify(phoneChecks));
+    let phone = phoneChecks['billingInfo.contactDetails.phone'] ||
+                phoneChecks['billingInfo.phone'] ||
+                phoneChecks['buyerInfo.phone'] ||
+                phoneChecks['buyerInfo.contactDetails.phone'] ||
+                phoneChecks['customerPhone'] ||
+                phoneChecks['shippingInfo.logistics.shippingDestination.contactDetails.phone'] ||
+                phoneChecks['contact.phones[0].phone'] ||
+                phoneChecks['contact.phone'] ||
+                phoneChecks['payload.phone'];
     if (!phone) {
       await client.query('ROLLBACK');
       client.release();
