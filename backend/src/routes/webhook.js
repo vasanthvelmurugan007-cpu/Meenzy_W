@@ -1166,8 +1166,14 @@ router.post('/webhook/whatsapp', async (req, res) => {
             if (btnId === 'option_2_swap') btnId = 'resolution_swap_PREORDER';
             if (btnId === 'option_3_postpone') btnId = 'resolution_postpone_PREORDER';
 
-            // New: Cancellation & Resolution Flow
-            if (btnId.startsWith('cancel_wix_order_') || btnId.startsWith('resolution_') || btnId.startsWith('reason_refund_') || btnId.startsWith('postpone_date_') || btnId.startsWith('swap_fish_')) {
+            // New: Cancellation & Resolution Flow (includes swap confirmation yes/no)
+            if (
+              btnId.startsWith('cancel_wix_order_') ||
+              btnId.startsWith('resolution_') ||
+              btnId.startsWith('reason_refund_') ||
+              btnId.startsWith('postpone_date_') ||
+              btnId.startsWith('swap_fish_')
+            ) {
               const { handleOrderResolutionFlow } = require('../engine/resolutionManager');
               await handleOrderResolutionFlow(client, r.contact_number, account, btnId, insertPendingRow, enqueueSend);
               r.__handled = true;
