@@ -1384,70 +1384,17 @@ router.post('/webhook/whatsapp', async (req, res) => {
                console.error('[pincode-capture] Error updating ecosystem_orders:', e.message);
              }
                
-             // Update meenzy_preorders and convert to ecosystem_orders
+             // Update meenzy_preorders address (but do NOT create ecosystem_orders — only website orders go there)
              try {
-               // 1. Fetch all pending preorders for this user
-               const { rows: preorders } = await client.query(`
-                 SELECT id, ordered_item, quantity 
-                 FROM coexistence.meenzy_preorders 
-                 WHERE customer_phone = $1 AND order_status IN ('PENDING_CHECKOUT', 'CREATED', 'CONFIRMED', 'PENDING_MARKET')
-               `, [r.contact_number]);
-               
-               if (preorders.length > 0) {
-                 let totalPrice = 0;
-                 const itemsData = [];
-                 
-                 // 2. Calculate prices from catalog
-                 for (const po of preorders) {
-                   const { rows: catRows } = await client.query(`SELECT price_in_inr FROM coexistence.meenzy_catalog WHERE item_name = $1`, [po.ordered_item]);
-                   const pricePerKg = catRows.length > 0 ? catRows[0].price_in_inr : 800; // default to 800 if not found
-                   const lineTotal = pricePerKg * po.quantity;
-                   totalPrice += lineTotal;
-                   itemsData.push({ id: po.id, name: po.ordered_item, qty: po.quantity, lineTotal });
-                 }
-                 
-                 // 3. Create the ecosystem_order with Geocoding using unified geocodeAddress
-                 const addressStr = `WhatsApp Pincode: ${pincode}`;
-                 let lat = null, lng = null;
-                 try {
-                   const { geocodeAddress } = require('../services/geocoder');
-                   const geo = await geocodeAddress(pincode + ', India');
-                   if (geo) {
-                     lat = geo.lat;
-                     lng = geo.lng;
-                   }
-                 } catch (geoErr) {
-                   console.error('[Geocode] Failed to geocode pincode', pincode, geoErr.message);
-                 }
-
-                 const otp = Math.floor(1000 + Math.random() * 9000).toString();
-                 const { rows: ecoRows } = await client.query(`
-                   INSERT INTO coexistence.ecosystem_orders (user_phone, total_price, status, address_line, lat, lng, delivery_otp)
-                   VALUES ($1, $2, 'CREATED', $3, $4, $5, $6)
-                   RETURNING id
-                 `, [r.contact_number, totalPrice, addressStr, lat, lng, otp]);
-                 const ecoOrderId = ecoRows[0].id;
-                 
-                 // 4. Insert items
-                 for (const item of itemsData) {
-                   await client.query(`
-                     INSERT INTO coexistence.ecosystem_order_items (order_id, product_name, quantity, price)
-                     VALUES ($1, $2, $3, $4)
-                   `, [ecoOrderId, item.name, item.qty, item.lineTotal]);
-                 }
-                 
-                 // 5. Mark preorders as converted
-                 const idsToConvert = itemsData.map(i => i.id);
-                 await client.query(`
-                   UPDATE coexistence.meenzy_preorders 
-                   SET order_status = 'CONVERTED', address_line = $1, otp = $3
-                   WHERE id = ANY($2::bigint[])
-                 `, [addressStr, idsToConvert, otp]);
-                 
-                 updatedCount += preorders.length;
-               }
+               const addressStr = `WhatsApp Pincode: ${pincode}`;
+               const res2 = await client.query(`
+                 UPDATE coexistence.meenzy_preorders 
+                 SET address_line = $1
+                 WHERE customer_phone = $2 AND order_status IN ('PENDING_CHECKOUT', 'CREATED', 'CONFIRMED', 'PENDING_MARKET', 'confirmed', 'pending_market')
+               `, [addressStr, r.contact_number]);
+               updatedCount += res2.rowCount;
              } catch (e) {
-               console.error('[pincode-capture] Error converting preorders:', e.message);
+               console.error('[pincode-capture] Error updating preorders:', e.message);
              }
              
              if (updatedCount > 0) {
@@ -1626,15 +1573,7 @@ router.post('/webhook/whatsapp', async (req, res) => {
                       
                       confMsg += `Thank you for your order! 🌊 (Order #${orderId})\n\nBecause we source our seafood fresh daily, your order is currently marked as a Preorder.\n\nRequested Items:\n`;
                       
-                      // 1. Create the ecosystem_order first to link items
-                      const otp = Math.floor(1000 + Math.random() * 9000).toString();
-                      const { rows: ecoRows } = await client.query(`
-                        INSERT INTO coexistence.ecosystem_orders (user_phone, total_price, status, delivery_otp)
-                        VALUES ($1, 0, 'CREATED', $2)
-                        RETURNING id
-                      `, [r.contact_number, otp]);
-                      const ecoOrderId = ecoRows[0].id;
-                      
+                      // WhatsApp AI orders go to meenzy_preorders only (not ecosystem_orders — only website orders go there)
                       for (const order of items) {
                         const qty = parseFloat(order.qty) || 1;
                         await client.query(
@@ -1654,18 +1593,9 @@ router.post('/webhook/whatsapp', async (req, res) => {
                           hasPrices = true;
                         }
                         
-                        // 2. Insert into ecosystem_order_items
-                        await client.query(`
-                          INSERT INTO coexistence.ecosystem_order_items (order_id, product_name, quantity, price)
-                          VALUES ($1, $2, $3, $4)
-                        `, [ecoOrderId, order.item, qty, itemTotal]);
-                        
                         confMsg += `* ${order.item} - ${qty} Kg${itemPriceStr}\n`;
                         cartPayload.push({ item: order.item, qty });
                       }
-                      
-                      // 3. Update final ecosystem order total
-                      await client.query(`UPDATE coexistence.ecosystem_orders SET total_price = $1 WHERE id = $2`, [totalAmount, ecoOrderId]);
                       
                       if (hasPrices) {
                         confMsg += `\n💵 Total: ₹${totalAmount.toFixed(2)}\n`;
