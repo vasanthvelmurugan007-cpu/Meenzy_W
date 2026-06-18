@@ -1939,7 +1939,7 @@ router.get('/public/catalog', async (req, res) => {
  * Sends a detailed WhatsApp order confirmation summary with item images / prices.
  */
 router.post('/public/checkout', async (req, res) => {
-  const { phone, items } = req.body;
+  const { phone, items, address } = req.body;
   if (!phone || !items || !Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: 'Phone number and cart items are required' });
   }
@@ -1949,16 +1949,54 @@ router.post('/public/checkout', async (req, res) => {
     const { enqueueSend } = require('../queue/sendQueue');
     const { account, error } = await resolveAccount({});
 
+    const normalizedPhone = String(phone).replace(/\D/g, '');
+    const total = items.reduce((sum, item) => sum + (parseFloat(item.price) * item.quantity), 0);
+    const otp = Math.floor(1000 + Math.random() * 9000).toString();
+
+    // Geocode address if provided
+    let lat = null, lng = null;
+    let addressLine = address || null;
+    if (addressLine) {
+      try {
+        const { geocodeAddress } = require('../services/geocoder');
+        const geo = await geocodeAddress(addressLine);
+        if (geo) { lat = geo.lat; lng = geo.lng; }
+      } catch (geoErr) {
+        console.warn('[public-checkout] Geocoding failed:', geoErr.message);
+      }
+    }
+
     const client = await pool.connect();
+    let ecosystemOrderId;
     try {
       await client.query('BEGIN');
+
+      // 1. Insert into ecosystem_orders so it appears in the Delivery Dashboard
+      const { rows: ecoRows } = await client.query(
+        `INSERT INTO coexistence.ecosystem_orders (user_phone, total_price, status, address_line, lat, lng, delivery_otp)
+         VALUES ($1, $2, 'CREATED', $3, $4, $5, $6)
+         RETURNING id`,
+        [normalizedPhone, total, addressLine, lat, lng, otp]
+      );
+      ecosystemOrderId = ecoRows[0].id;
+
+      // 2. Insert each item into ecosystem_order_items AND meenzy_preorders
       for (const item of items) {
+        const itemPrice = parseFloat(item.price) * item.quantity;
+
         await client.query(
-          `INSERT INTO coexistence.meenzy_preorders (customer_phone, ordered_item, quantity)
-           VALUES ($1, $2, $3)`,
-          [phone, item.title, parseFloat(item.quantity)]
+          `INSERT INTO coexistence.ecosystem_order_items (order_id, product_name, quantity, price)
+           VALUES ($1, $2, $3, $4)`,
+          [ecosystemOrderId, item.title, parseFloat(item.quantity), itemPrice]
+        );
+
+        await client.query(
+          `INSERT INTO coexistence.meenzy_preorders (customer_phone, ordered_item, quantity, otp)
+           VALUES ($1, $2, $3, $4)`,
+          [normalizedPhone, item.title, parseFloat(item.quantity), otp]
         );
       }
+
       await client.query('COMMIT');
     } catch (err) {
       await client.query('ROLLBACK');
@@ -1969,8 +2007,8 @@ router.post('/public/checkout', async (req, res) => {
 
     if (!error && account) {
       const itemsSummary = items.map(item => `• *${item.title}* (${item.quantity} Kg) - ₹${item.price}/Kg`).join('\n');
-      const total = items.reduce((sum, item) => sum + (parseFloat(item.price) * item.quantity), 0);
-      const confText = `🐟 *Meenzy Order Registered!* 🛒\n\nYour preorder has been successfully registered:\n\n${itemsSummary}\n\n💵 *Total Price*: *₹${total}*\n\nOnce we verify availability in today's fresh market catch, we will confirm and notify you!\n\nThank you! 🍽️`;
+      const trackingLink = `${process.env.CORS_ORIGIN || 'https://meenzy-frontend.onrender.com'}/#/track/${ecosystemOrderId}?phone=${normalizedPhone.slice(-4)}`;
+      const confText = `🐟 *Meenzy Order Registered!* 🛒\n\nYour preorder has been successfully registered:\n\n${itemsSummary}\n\n💵 *Total Price*: *₹${total}*\n\nOnce we verify availability in today's fresh market catch, we will confirm and notify you!\n\n📍 *Track your order live:*\n${trackingLink}\n\nThank you! 🍽️`;
 
       if (items.length === 1) {
         const product = items[0];
@@ -1978,19 +2016,19 @@ router.post('/public/checkout', async (req, res) => {
           account, toNumber: phone, messageType: 'image', messageBody: confText, mediaUrl: product.image_url
         });
         await enqueueSend({
-          kind: 'media', accountId: account.id, to: String(phone).replace(/\D/g, ''), localMessageId: localId, payload: { type: 'image', link: product.image_url, caption: confText }
+          kind: 'media', accountId: account.id, to: normalizedPhone, localMessageId: localId, payload: { type: 'image', link: product.image_url, caption: confText }
         });
       } else {
         const localId = await insertPendingRow({
           account, toNumber: phone, messageType: 'text', messageBody: confText
         });
         await enqueueSend({
-          kind: 'text', accountId: account.id, to: String(phone).replace(/\D/g, ''), localMessageId: localId, payload: { body: confText, previewUrl: false }
+          kind: 'text', accountId: account.id, to: normalizedPhone, localMessageId: localId, payload: { body: confText, previewUrl: false }
         });
       }
     }
 
-    res.json({ ok: true });
+    res.json({ ok: true, orderId: ecosystemOrderId });
   } catch (err) {
     console.error('[public-checkout] Error:', err.message);
     res.status(500).json({ error: 'Internal server error during checkout' });
