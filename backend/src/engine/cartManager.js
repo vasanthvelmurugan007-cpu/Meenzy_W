@@ -2,6 +2,8 @@ const pool = require('../db');
 const { insertPendingRow } = require('../services/messageSender');
 const { enqueueSend } = require('../queue/sendQueue');
 const catalogData = require('../catalogData');
+const { createWixCartLink } = require('../services/wixCartService');
+const { mapOrderToWixItems } = require('../services/wixProductMap');
 
 // Robust TSV Parser to handle multi-line quotes and TSV structure
 function parseTSV(text) {
@@ -361,13 +363,44 @@ async function handleCartState(whatsappId, account, incomingPayload) {
         
         await client.query('COMMIT');
         
-        // Send final message
+        // Send schedule confirmation message
         const finalMsg = `✅ *Schedule Confirmed!*\n\nYour order is scheduled for delivery *${deliveryDate}, ${deliveryTime}*. We'll notify you when it's out for delivery!`;
-        const { insertPendingRow } = require('../services/messageSender');
-        const { enqueueSend } = require('../queue/sendQueue');
         const localId = await insertPendingRow({ account, toNumber: whatsappId, messageType: 'text', messageBody: finalMsg });
         await enqueueSend({ kind: 'text', accountId: account.id, to: String(whatsappId).replace(/\D/g, ''), localMessageId: localId, payload: { body: finalMsg, previewUrl: false } });
-        
+
+        // --- Send Wix Payment Link ---
+        try {
+          // Re-fetch cart items from DB (cart may already be 'converted')
+          const cartRes = await pool.query(
+            `SELECT cart_items FROM coexistence.meenzy_carts WHERE whatsapp_id = $1 ORDER BY updated_at DESC LIMIT 1`,
+            [whatsappId]
+          );
+          const cartItems = cartRes.rows[0]?.cart_items || [];
+
+          if (cartItems.length > 0) {
+            // Map WhatsApp product names → Wix Product IDs
+            const orderItems = cartItems.map(item => ({ name: item.base_name, quantity: item.quantity }));
+            const wixItems = mapOrderToWixItems(orderItems);
+
+            if (wixItems.length > 0) {
+              const { cartUrl } = await createWixCartLink({
+                phone: String(whatsappId).replace(/\D/g, ''),
+                items: wixItems
+              });
+
+              const paymentMsg = `💳 *Complete Your Payment*\n\nTap the link below to pay securely on our website:\n${cartUrl}\n\n_This link will add your items to the cart automatically and take you to checkout._\n\n⏱️ _Link expires in 24 hours._`;
+              const payLocalId = await insertPendingRow({ account, toNumber: whatsappId, messageType: 'text', messageBody: 'Payment link sent' });
+              await enqueueSend({ kind: 'text', accountId: account.id, to: String(whatsappId).replace(/\D/g, ''), localMessageId: payLocalId, payload: { body: paymentMsg, previewUrl: true } });
+              console.log(`[cartManager] Wix payment link sent to ${whatsappId}: ${cartUrl}`);
+            } else {
+              console.warn('[cartManager] No Wix product IDs matched for cart items:', orderItems.map(i => i.name));
+            }
+          }
+        } catch (wixErr) {
+          // Non-fatal: log but don't fail the order
+          console.error('[cartManager] Wix cart link error:', wixErr.message);
+        }
+
       } catch (e) {
         await client.query('ROLLBACK');
         console.error('[cartManager] Delivery Setup Error:', e.message);
