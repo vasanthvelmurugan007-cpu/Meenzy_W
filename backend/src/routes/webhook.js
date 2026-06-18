@@ -1277,8 +1277,6 @@ router.post('/webhook/whatsapp', async (req, res) => {
                 r.__handled = true;
                 continue;
               }
-
-            }
             }
             // ── End Swap Fish Handler ─────────────────────────────────────────────
 
