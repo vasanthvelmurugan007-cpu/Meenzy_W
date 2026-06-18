@@ -725,7 +725,7 @@ export default function AgentPortalPage() {
               <div style={{ position: 'absolute', bottom: 20, left: 20, right: 20, background: theme.cardBg, borderRadius: 16, padding: 16, zIndex: 20, boxShadow: '0 10px 25px rgba(0,0,0,0.2)', border: `1px solid ${theme.border}` }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
                   <div>
-                    <h4 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: theme.text }}>Order #{selectedOrder.wix_order_id || selectedOrder.id.split('-')[0].toUpperCase()}</h4>
+                    <h4 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: theme.text }}>Order #{selectedOrder.wix_order_id || String(selectedOrder.id).split('-')[0].toUpperCase()}</h4>
                     {selectedOrder.customer_name && <p style={{ margin: '4px 0 0 0', fontSize: 14, fontWeight: 700, color: '#3b82f6' }}>{selectedOrder.customer_name}</p>}
                     <p style={{ margin: '4px 0 0 0', fontSize: 12, color: theme.subText, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{selectedOrder.address_line}</p>
                   </div>
@@ -810,7 +810,7 @@ export default function AgentPortalPage() {
                     <span style={{ background: '#dbeafe', color: '#1e40af', padding: '4px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>
                       Stop {index + 1}
                     </span>
-                    <h3 style={{ margin: '8px 0 4px 0', fontSize: 18, color: theme.text, fontWeight: 800 }}>Order #{order.wix_order_id || order.id.split('-')[0].toUpperCase()}</h3>
+                    <h3 style={{ margin: '8px 0 4px 0', fontSize: 18, color: theme.text, fontWeight: 800 }}>Order #{order.wix_order_id || String(order.id).split('-')[0].toUpperCase()}</h3>
                     {order.customer_name && <p style={{ margin: '0 0 4px 0', fontSize: 14, fontWeight: 700, color: '#3b82f6' }}>{order.customer_name}</p>}
                     <p style={{ margin: 0, color: theme.subText, fontSize: 13, display: 'flex', alignItems: 'center', gap: 4 }}>
                       <Clock size={14} /> {new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -900,7 +900,7 @@ export default function AgentPortalPage() {
         {showModifyModal && (
           <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
             <div style={{ background: theme.cardBg, borderRadius: 16, width: '100%', maxWidth: 400, padding: 24, border: `1px solid ${theme.border}` }}>
-              <h2 style={{ margin: '0 0 16px 0', fontSize: 18, color: theme.text, fontWeight: 800 }}>Modify Order #{showModifyModal.wix_order_id}</h2>
+              <h2 style={{ margin: '0 0 16px 0', fontSize: 18, color: theme.text, fontWeight: 800 }}>Modify Order #{showModifyModal.wix_order_id || String(showModifyModal.id).split('-')[0].toUpperCase()}</h2>
               <p style={{ margin: '0 0 16px 0', fontSize: 13, color: theme.subText }}>Customer returning items? Specify rejected quantities below.</p>
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 300, overflowY: 'auto', marginBottom: 20 }}>

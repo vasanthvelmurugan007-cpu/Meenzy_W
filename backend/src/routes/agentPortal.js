@@ -500,8 +500,8 @@ router.post('/:agentId/start-route', verifyAgent, async (req, res) => {
         phone = '91' + phone;
       }
 
-      // Wix order id or generated id
-      const orderIdDisplay = order.wix_order_id || order.id.split('-')[0].toUpperCase();
+      // Wix order id or generated id — must match exactly what both portals display
+      const orderIdDisplay = order.wix_order_id || String(order.id).split('-')[0].toUpperCase();
 
       const payload = {
         messaging_product: "whatsapp",
