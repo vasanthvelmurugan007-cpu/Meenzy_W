@@ -510,7 +510,6 @@ router.post('/meenzy/inventory-failure', async (req, res) => {
         action: {
           buttons: [
             { type: "reply", reply: { id: "option_1_refund", title: "Refund 💵" } },
-            { type: "reply", reply: { id: "option_2_swap", title: "Swap Fish 🐟" } },
             { type: "reply", reply: { id: "option_3_postpone", title: "Postpone ⏳" } }
           ]
         }
@@ -849,28 +848,19 @@ router.post('/admin/verify-catch', async (req, res) => {
         [preorder.id]
       );
 
-      // Build interactive dynamic option list rows
-      const optionsRows = sortedReplacements.map((alt, idx) => {
-        const calculatedTotal = quantity * alt.price_in_inr;
-        return {
-          id: `swap_alt_${idx + 1}`,
-          title: `Swap: ${alt.item_name.substring(0, 18)}`,
-          description: `Rate: ₹${alt.price_in_inr}/Kg | Total: ₹${calculatedTotal}`
-        };
-      });
-
-      // Add Cancel & Refund and Postpone options
-      optionsRows.push({
-        id: "swap_cancel",
-        title: "Cancel & Refund 💵",
-        description: "Cancel preorder & receive full refund"
-      });
-
-      optionsRows.push({
-        id: "swap_postpone",
-        title: "Postpone Delivery ⏳",
-        description: "Postpone catch delivery to tomorrow"
-      });
+      // Build interactive option rows — Refund and Postpone only
+      const optionsRows = [
+        {
+          id: "swap_cancel",
+          title: "Cancel & Refund 💵",
+          description: "Cancel preorder & receive full refund"
+        },
+        {
+          id: "swap_postpone",
+          title: "Postpone Delivery ⏳",
+          description: "Postpone catch delivery to tomorrow"
+        }
+      ];
 
       const listPayload = {
         type: "list",
@@ -879,7 +869,7 @@ router.post('/admin/verify-catch', async (req, res) => {
           text: `⚠️ Preorder Action Required`
         },
         body: {
-          text: `We are sorry! *${unavailableName}* is not available in today's fresh catches.\n\nPlease select one of the following dynamic resolution options for your order of *${quantity} Kg*:`
+          text: `We are sorry! *${unavailableName}* is not available in today's fresh catches.\n\nPlease select a resolution option for your order of *${quantity} Kg*:`
         },
         action: {
           button: "Resolve Order",

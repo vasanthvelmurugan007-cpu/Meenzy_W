@@ -24,7 +24,6 @@ async function handleOrderResolutionFlow(client, phone, account, btnId, insertPe
         action: {
           buttons: [
             { type: 'reply', reply: { id: `resolution_refund_${orderId}`, title: 'Refund 💸' } },
-            { type: 'reply', reply: { id: `resolution_swap_${orderId}`,   title: 'Swap Fish 🐟' } },
             { type: 'reply', reply: { id: `resolution_postpone_${orderId}`, title: 'Postpone 🗓️' } },
           ],
         },
