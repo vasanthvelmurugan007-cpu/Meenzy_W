@@ -55,7 +55,7 @@ export async function post_createWhatsAppCart(request) {
       items: JSON.stringify(items)   // stored as text; parsed on cart-sync page
     }, { suppressAuth: true });
 
-    const cartUrl = `https://www.meenzy.com/cart-sync?cart_token=${token}`;
+    const cartUrl = `https://www.meenzy.in/cart-sync?cart_token=${token}`;
 
     return ok({
       headers: { 'Content-Type': 'application/json' },
