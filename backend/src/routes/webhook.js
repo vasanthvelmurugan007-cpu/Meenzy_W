@@ -1618,7 +1618,14 @@ router.post('/webhook/whatsapp', async (req, res) => {
                     if (items && items.length > 0) {
                       let confMsg = `${dynamicReply}\n\n`;
                       
+                      const { getPriceForExtractedItem } = require('../catalogParser');
                       const cartPayload = [];
+                      let totalAmount = 0;
+                      let hasPrices = false;
+                      const orderId = 'ORD-' + Math.floor(100000 + Math.random() * 900000);
+                      
+                      confMsg += `Thank you for your order! 🌊 (Order #${orderId})\n\nBecause we source our seafood fresh daily, your order is currently marked as a Preorder.\n\nRequested Items:\n`;
+                      
                       for (const order of items) {
                         const qty = parseFloat(order.qty) || 1;
                         await client.query(
@@ -1627,20 +1634,25 @@ router.post('/webhook/whatsapp', async (req, res) => {
                         );
                         // Also mirror to temporary carts for abandonment tracking
                         await updateTemporaryCart(client, r.contact_number, order.item, qty, 'ai_intake_complete');
-                        confMsg += `🐟 *${order.item}* - ${qty} Kg\n`;
+                        
+                        const pricePerKg = getPriceForExtractedItem(order.item);
+                        let itemPriceStr = '';
+                        if (pricePerKg > 0) {
+                          const itemTotal = pricePerKg * qty;
+                          totalAmount += itemTotal;
+                          itemPriceStr = ` - ₹${itemTotal.toFixed(2)}`;
+                          hasPrices = true;
+                        }
+                        
+                        confMsg += `* ${order.item} - ${qty} Kg${itemPriceStr}\n`;
                         cartPayload.push({ item: order.item, qty });
                       }
                       
-                      const base64Cart = Buffer.from(JSON.stringify(cartPayload)).toString('base64');
-                      const encodedCart = encodeURIComponent(base64Cart);
-                      let checkoutUrl = await generateWixCheckoutUrl(cartPayload);
-                      
-                      // Fallback to our custom checkout page if Wix API fails or item not found
-                      if (!checkoutUrl) {
-                        checkoutUrl = `https://www.meenzy.in/cart-page?data=${encodedCart}&phone=${r.contact_number}`;
+                      if (hasPrices) {
+                        confMsg += `\n💵 Total: ₹${totalAmount.toFixed(2)}\n`;
                       }
-
-                      confMsg += `\nYour smart cart is ready! 🛒\n\nPlease click the link below to review your exact order details and securely checkout on our website:\n${checkoutUrl}\n\nThank you for choosing Meenzy Fresh Seafood! 🍽️`;
+                      
+                      confMsg += `\nYour order has been registered. We will check for the availability and then we will send you the confirmation message soon!`;
                       
                       const crossSell = await generateCrossSellLLM(cartPayload);
                       if (crossSell) {
