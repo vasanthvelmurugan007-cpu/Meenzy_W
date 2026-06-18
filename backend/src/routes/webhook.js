@@ -1626,27 +1626,46 @@ router.post('/webhook/whatsapp', async (req, res) => {
                       
                       confMsg += `Thank you for your order! 🌊 (Order #${orderId})\n\nBecause we source our seafood fresh daily, your order is currently marked as a Preorder.\n\nRequested Items:\n`;
                       
+                      // 1. Create the ecosystem_order first to link items
+                      const otp = Math.floor(1000 + Math.random() * 9000).toString();
+                      const { rows: ecoRows } = await client.query(`
+                        INSERT INTO coexistence.ecosystem_orders (user_phone, total_price, status, delivery_otp)
+                        VALUES ($1, 0, 'CREATED', $2)
+                        RETURNING id
+                      `, [r.contact_number, otp]);
+                      const ecoOrderId = ecoRows[0].id;
+                      
                       for (const order of items) {
                         const qty = parseFloat(order.qty) || 1;
                         await client.query(
                           `INSERT INTO coexistence.meenzy_preorders (customer_phone, ordered_item, quantity, order_status) VALUES ($1, $2, $3, $4)`,
-                          [r.contact_number, order.item, qty, 'PENDING_CHECKOUT']
+                          [r.contact_number, order.item, qty, 'CONFIRMED']
                         );
                         // Also mirror to temporary carts for abandonment tracking
                         await updateTemporaryCart(client, r.contact_number, order.item, qty, 'ai_intake_complete');
                         
                         const pricePerKg = getPriceForExtractedItem(order.item);
                         let itemPriceStr = '';
+                        let itemTotal = 0;
                         if (pricePerKg > 0) {
-                          const itemTotal = pricePerKg * qty;
+                          itemTotal = pricePerKg * qty;
                           totalAmount += itemTotal;
                           itemPriceStr = ` - ₹${itemTotal.toFixed(2)}`;
                           hasPrices = true;
                         }
                         
+                        // 2. Insert into ecosystem_order_items
+                        await client.query(`
+                          INSERT INTO coexistence.ecosystem_order_items (order_id, product_name, quantity, price)
+                          VALUES ($1, $2, $3, $4)
+                        `, [ecoOrderId, order.item, qty, itemTotal]);
+                        
                         confMsg += `* ${order.item} - ${qty} Kg${itemPriceStr}\n`;
                         cartPayload.push({ item: order.item, qty });
                       }
+                      
+                      // 3. Update final ecosystem order total
+                      await client.query(`UPDATE coexistence.ecosystem_orders SET total_price = $1 WHERE id = $2`, [totalAmount, ecoOrderId]);
                       
                       if (hasPrices) {
                         confMsg += `\n💵 Total: ₹${totalAmount.toFixed(2)}\n`;
