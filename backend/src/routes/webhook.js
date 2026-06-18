@@ -1610,6 +1610,29 @@ router.post('/webhook/whatsapp', async (req, res) => {
 
                       const localId = await insertPendingRow({ account, toNumber: r.contact_number, messageType: 'text', messageBody: confMsg });
                       await enqueueSend({ kind: 'text', accountId: account.id, to: String(r.contact_number).replace(/\D/g, ''), localMessageId: localId, payload: { body: confMsg, previewUrl: true } });
+
+                      // --- Send Wix Payment Link ---
+                      try {
+                        const { createWixCartLink } = require('../services/wixCartService');
+                        const { mapOrderToWixItems } = require('../services/wixProductMap');
+                        const orderItemsForWix = items.map(o => ({ name: o.item, quantity: parseFloat(o.qty) || 1 }));
+                        const wixItems = mapOrderToWixItems(orderItemsForWix);
+                        if (wixItems.length > 0) {
+                          const { cartUrl } = await createWixCartLink({
+                            phone: String(r.contact_number).replace(/\D/g, ''),
+                            items: wixItems
+                          });
+                          const paymentMsg = `💳 *Complete Your Payment Online*\n\nTap the link below to pay securely on our website:\n${cartUrl}\n\n_Your items will be automatically added to the cart. Just click Checkout!_\n\n⏱️ _Link expires in 24 hours._`;
+                          const payLocalId = await insertPendingRow({ account, toNumber: r.contact_number, messageType: 'text', messageBody: 'Wix payment link sent' });
+                          await enqueueSend({ kind: 'text', accountId: account.id, to: String(r.contact_number).replace(/\D/g, ''), localMessageId: payLocalId, payload: { body: paymentMsg, previewUrl: true } });
+                          console.log(`[PLACING_ORDER] Wix payment link sent to ${r.contact_number}: ${cartUrl}`);
+                        } else {
+                          console.warn(`[PLACING_ORDER] No Wix product IDs matched for:`, orderItemsForWix.map(i => i.name));
+                        }
+                      } catch (wixErr) {
+                        console.error('[PLACING_ORDER] Wix cart link error (non-fatal):', wixErr.message);
+                      }
+
                       
                     } else {
                       // Fallback if LLM couldn't extract items
