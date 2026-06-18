@@ -15,7 +15,7 @@
 
 const WIX_FUNCTION_URL =
   process.env.WIX_FUNCTION_URL ||
-  'https://www.meenzy.com/_functions/createWhatsAppCart';
+  'https://www.meenzy.in/_functions/createWhatsAppCart';
 
 /**
  * Creates a Wix cart from a WhatsApp order and returns the payment link.
