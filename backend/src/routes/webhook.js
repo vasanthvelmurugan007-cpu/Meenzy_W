@@ -1161,8 +1161,13 @@ router.post('/webhook/whatsapp', async (req, res) => {
           console.log('[DEBUG-2] resolveAccount returned:', { hasAccount: !!account, error });
           
           if (!error && account) {
+            // Map legacy inventory-failure options to resolution flow
+            if (btnId === 'option_1_refund') btnId = 'resolution_refund_PREORDER';
+            if (btnId === 'option_2_swap') btnId = 'resolution_swap_PREORDER';
+            if (btnId === 'option_3_postpone') btnId = 'resolution_postpone_PREORDER';
+
             // New: Cancellation & Resolution Flow
-            if (btnId.startsWith('cancel_wix_order_') || btnId.startsWith('resolution_') || btnId.startsWith('reason_refund_') || btnId.startsWith('postpone_date_')) {
+            if (btnId.startsWith('cancel_wix_order_') || btnId.startsWith('resolution_') || btnId.startsWith('reason_refund_') || btnId.startsWith('postpone_date_') || btnId.startsWith('swap_fish_')) {
               const { handleOrderResolutionFlow } = require('../engine/resolutionManager');
               await handleOrderResolutionFlow(client, r.contact_number, account, btnId, insertPendingRow, enqueueSend);
               r.__handled = true;
