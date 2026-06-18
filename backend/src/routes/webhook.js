@@ -1285,22 +1285,15 @@ router.post('/webhook/whatsapp', async (req, res) => {
               const newFishName  = selectedAlt.item_name;
               const newFishPrice = parseFloat(selectedAlt.price_in_inr) || 0;
 
-              // ── Price Comparison: look up OLD fish price from meenzy_catalog ──
-              let oldFishPrice = 0;
-              try {
-                const catRes = await client.query(
-                  `SELECT price_in_inr FROM coexistence.meenzy_catalog WHERE item_name ILIKE $1 LIMIT 1`,
-                  [oldFishName]
-                );
-                if (catRes.rows.length > 0) {
-                  oldFishPrice = parseFloat(catRes.rows[0].price_in_inr) || 0;
-                }
-              } catch (catErr) {
-                console.warn('[meenzy-swap] Could not fetch old fish price from catalog:', catErr.message);
-              }
+              // ── Old fish price: use what was stored in session at swap initiation ──
+              // This avoids a catalog re-query that can silently fail on name mismatches
+              // (e.g. "Rohu" in preorder vs "Rohu Fish" in catalog), which was the bug
+              // that made oldFishPrice = 0 and extraAmount = full new price instead of diff.
+              const oldFishPrice = parseFloat(session.originalItemPrice) || 0;
 
-              const oldTotal = oldFishPrice * quantity;
-              const newTotal = newFishPrice * quantity;
+              const oldTotal = parseFloat((oldFishPrice * quantity).toFixed(2));
+              const newTotal = parseFloat((newFishPrice * quantity).toFixed(2));
+              const priceDiff = parseFloat((newTotal - oldTotal).toFixed(2)); // positive = extra due, negative = credit
 
               // ── Update preorder with new fish ─────────────────────────────────
               await client.query(
@@ -1310,10 +1303,10 @@ router.post('/webhook/whatsapp', async (req, res) => {
                 [newFishName, preorderId]
               );
 
-              // ── Also update the matching ecosystem_order item if it exists ────
+              // ── Also update the matching ecosystem_order item and total_price ──
               try {
                 const ecoRes = await client.query(
-                  `SELECT i.id AS item_id
+                  `SELECT i.id AS item_id, o.id AS order_id, o.total_price
                    FROM coexistence.ecosystem_order_items i
                    JOIN coexistence.ecosystem_orders o ON o.id = i.order_id
                    WHERE RIGHT(regexp_replace(o.user_phone, '\\D', '', 'g'), 10) = RIGHT($1, 10)
@@ -1322,12 +1315,21 @@ router.post('/webhook/whatsapp', async (req, res) => {
                   [r.contact_number, `%${oldFishName}%`]
                 );
                 if (ecoRes.rows.length > 0) {
+                  const { item_id, order_id, total_price } = ecoRes.rows[0];
+                  // Update the line-item to the new fish
                   await client.query(
                     `UPDATE coexistence.ecosystem_order_items
                      SET product_name = $1, price = $2
                      WHERE id = $3`,
-                    [newFishName, newTotal, ecoRes.rows[0].item_id]
+                    [newFishName, newTotal, item_id]
                   );
+                  // Adjust the order total by the price difference
+                  const adjustedTotal = parseFloat((parseFloat(total_price) + priceDiff).toFixed(2));
+                  await client.query(
+                    `UPDATE coexistence.ecosystem_orders SET total_price = $1 WHERE id = $2`,
+                    [adjustedTotal, order_id]
+                  );
+                  console.log(`[meenzy-swap] Updated ecosystem_order ${order_id}: old total=₹${total_price} + diff=₹${priceDiff} → new total=₹${adjustedTotal}`);
                 }
               } catch (ecoErr) {
                 console.warn('[meenzy-swap] Could not sync ecosystem order item:', ecoErr.message);
@@ -1341,9 +1343,7 @@ router.post('/webhook/whatsapp', async (req, res) => {
 
               if (newFishPrice > oldFishPrice) {
                 // New fish is MORE expensive → notify extra charge
-                const extraPerKg  = newFishPrice - oldFishPrice;
-                const extraAmount = parseFloat((extraPerKg * quantity).toFixed(2));
-                const newTotalDisplay = parseFloat(newTotal.toFixed(2));
+                const extraAmount = priceDiff; // already (newTotal - oldTotal)
 
                 swapMsg =
                   `🔄 *Swap Request Confirmed!*\n\n` +
@@ -1353,17 +1353,17 @@ router.post('/webhook/whatsapp', async (req, res) => {
                   `📦 *Order Summary:*\n` +
                   `• Item: ${newFishName} (${quantity} Kg)\n` +
                   `• Rate: ₹${newFishPrice}/Kg\n` +
-                  `• Total outstanding to pay: *₹${newTotalDisplay}*\n\n` +
+                  `• Previous total: ₹${oldTotal}\n` +
+                  `• Extra charge: *₹${extraAmount}*\n` +
+                  `• Total outstanding to pay: *₹${newTotal}*\n\n` +
                   `Our team will confirm your updated order and collect the balance at delivery. ` +
                   `Thank you for choosing Meenzy! 🌊`;
 
-                console.log(`[meenzy-swap] Price-up swap: old=${oldFishName}(₹${oldFishPrice}) → new=${newFishName}(₹${newFishPrice}), extra=₹${extraAmount}, customer=${r.contact_number}`);
+                console.log(`[meenzy-swap] Price-up swap: old=${oldFishName}(₹${oldFishPrice}/kg × ${quantity}kg = ₹${oldTotal}) → new=${newFishName}(₹${newFishPrice}/kg × ${quantity}kg = ₹${newTotal}), extra=₹${extraAmount}, customer=${r.contact_number}`);
 
               } else if (newFishPrice < oldFishPrice) {
-                // New fish is CHEAPER → credit / refund the difference
-                const savedPerKg  = oldFishPrice - newFishPrice;
-                const savedAmount = parseFloat((savedPerKg * quantity).toFixed(2));
-                const newTotalDisplay = parseFloat(newTotal.toFixed(2));
+                // New fish is CHEAPER → credit the difference
+                const savedAmount = Math.abs(priceDiff);
 
                 swapMsg =
                   `🔄 *Swap Request Confirmed!*\n\n` +
@@ -1373,15 +1373,15 @@ router.post('/webhook/whatsapp', async (req, res) => {
                   `📦 *Order Summary:*\n` +
                   `• Item: ${newFishName} (${quantity} Kg)\n` +
                   `• Rate: ₹${newFishPrice}/Kg\n` +
-                  `• New total: *₹${newTotalDisplay}*\n\n` +
+                  `• Previous total: ₹${oldTotal}\n` +
+                  `• Credit applied: *-₹${savedAmount}*\n` +
+                  `• New total: *₹${newTotal}*\n\n` +
                   `Your order has been updated. Thank you for your patience! 🐟`;
 
-                console.log(`[meenzy-swap] Price-down swap: old=${oldFishName}(₹${oldFishPrice}) → new=${newFishName}(₹${newFishPrice}), saved=₹${savedAmount}, customer=${r.contact_number}`);
+                console.log(`[meenzy-swap] Price-down swap: old=${oldFishName}(₹${oldFishPrice}/kg × ${quantity}kg = ₹${oldTotal}) → new=${newFishName}(₹${newFishPrice}/kg × ${quantity}kg = ₹${newTotal}), saved=₹${savedAmount}, customer=${r.contact_number}`);
 
               } else {
                 // Same price → simple swap, no financial impact
-                const newTotalDisplay = parseFloat(newTotal.toFixed(2));
-
                 swapMsg =
                   `🔄 *Swap Request Confirmed!*\n\n` +
                   `You've selected *${newFishName}* to replace *${oldFishName}*.\n\n` +
@@ -1389,10 +1389,10 @@ router.post('/webhook/whatsapp', async (req, res) => {
                   `📦 *Order Summary:*\n` +
                   `• Item: ${newFishName} (${quantity} Kg)\n` +
                   `• Rate: ₹${newFishPrice}/Kg\n` +
-                  `• Total: *₹${newTotalDisplay}*\n\n` +
+                  `• Total: *₹${newTotal}*\n\n` +
                   `Your order has been updated. We'll deliver fresh as scheduled! 🌊`;
 
-                console.log(`[meenzy-swap] Same-price swap: old=${oldFishName} → new=${newFishName}(₹${newFishPrice}), customer=${r.contact_number}`);
+                console.log(`[meenzy-swap] Same-price swap: old=${oldFishName} → new=${newFishName}(₹${newFishPrice}/kg), customer=${r.contact_number}`);
               }
 
               const localId = await insertPendingRow({ account, toNumber: r.contact_number, messageType: 'text', messageBody: swapMsg });

@@ -837,6 +837,7 @@ router.post('/admin/verify-catch', async (req, res) => {
         unavailableItemName: unavailableName,
         originalQuantity: quantity,
         originalItem: preorder.ordered_item,
+        originalItemPrice: parseFloat(unavailablePrice) || 0,  // per-kg price of the OLD fish
         replacements: sortedReplacements
       };
 
@@ -1165,12 +1166,25 @@ router.post('/meenzy/batch-agent/process', async (req, res) => {
 
         await pool.query(`UPDATE coexistence.meenzy_preorders SET order_status = 'AWAITING_FAILURE_SWAP' WHERE id = $1`, [order.id]);
 
+        // Look up the old fish price from catalog for price-comparison at swap time
+        let originalItemPrice = 0;
+        try {
+          const oldPriceRes = await pool.query(
+            `SELECT price_in_inr FROM coexistence.meenzy_catalog WHERE item_name ILIKE $1 LIMIT 1`,
+            [itemName]
+          );
+          if (oldPriceRes.rows.length > 0) {
+            originalItemPrice = parseFloat(oldPriceRes.rows[0].price_in_inr) || 0;
+          }
+        } catch (_) {}
+
         meenzySessions[customerPhone] = {
           state: 'AWAITING_FAILURE_SWAP',
           preorderId: order.id,
           unavailableItemName: itemName,
           originalQuantity: quantity,
           originalItem: itemName,
+          originalItemPrice,  // per-kg price of the OLD fish
           replacements: replacementData.replacements
         };
 
