@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 
-import Map, { Marker, NavigationControl } from 'react-map-gl';
+import Map, { Marker, NavigationControl, Source, Layer } from 'react-map-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { Package, Navigation, Phone, CheckCircle, Clock, Check, Map as MapIcon } from 'lucide-react';
+import { Package, Navigation, Phone, CheckCircle, Clock, Check, Map as MapIcon, MapPin } from 'lucide-react';
 
 const FONT = "'Inter', sans-serif";
 
@@ -17,6 +17,8 @@ export default function PublicTrackingPage() {
   const [orderData, setOrderData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [routeGeoJSON, setRouteGeoJSON] = useState(null);
+  const mapToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
   useEffect(() => {
     fetchTrackingData();
@@ -44,6 +46,22 @@ export default function PublicTrackingPage() {
     }
   }
 
+  // Fetch route when coordinates are available
+  useEffect(() => {
+    if (orderData && orderData.agent?.lat && orderData.agent?.lng && orderData.lat && orderData.lng && mapToken) {
+      fetch(
+        `https://api.mapbox.com/directions/v5/mapbox/driving/${orderData.agent.lng},${orderData.agent.lat};${orderData.lng},${orderData.lat}?geometries=geojson&access_token=${mapToken}`
+      )
+        .then(r => r.json())
+        .then(data => {
+          if (data.routes && data.routes.length > 0) {
+            setRouteGeoJSON(data.routes[0].geometry);
+          }
+        })
+        .catch(console.error);
+    }
+  }, [orderData?.agent?.lat, orderData?.agent?.lng, orderData?.lat, orderData?.lng, mapToken]);
+
   if (loading) return <div style={{ padding: 40, textAlign: 'center', fontFamily: FONT }}>Loading your live delivery status...</div>;
   if (error) return <div style={{ padding: 40, textAlign: 'center', fontFamily: FONT, color: 'red' }}>{error}</div>;
   if (!orderData) return null;
@@ -59,7 +77,6 @@ export default function PublicTrackingPage() {
     { label: 'Delivered', completed: isDelivered }
   ];
 
-  const mapToken = import.meta.env.VITE_MAPBOX_TOKEN;
   const canRenderMap = hasAgentLocation && mapToken;
 
   return (
@@ -85,6 +102,28 @@ export default function PublicTrackingPage() {
             mapboxAccessToken={mapToken}
           >
             <NavigationControl position="top-right" />
+            
+            {routeGeoJSON && (
+              <Source type="geojson" data={{ type: 'Feature', properties: {}, geometry: routeGeoJSON }}>
+                <Layer
+                  id="route-line"
+                  type="line"
+                  layout={{ 'line-join': 'round', 'line-cap': 'round' }}
+                  paint={{ 'line-color': '#3b82f6', 'line-width': 4, 'line-dasharray': [2, 2] }}
+                />
+              </Source>
+            )}
+            
+            {/* Delivery Destination Marker */}
+            {orderData.lat && orderData.lng && (
+              <Marker longitude={parseFloat(orderData.lng)} latitude={parseFloat(orderData.lat)} anchor="bottom">
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <div style={{ background: '#ef4444', color: '#fff', width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.3)', border: '2px solid #fff' }}>
+                    <MapPin size={16} />
+                  </div>
+                </div>
+              </Marker>
+            )}
             
             {/* Agent Marker */}
             <Marker longitude={parseFloat(orderData.agent.lng)} latitude={parseFloat(orderData.agent.lat)} anchor="bottom">
