@@ -376,6 +376,5 @@ module.exports = {
   handleCutSelection,
   handleQuantitySelection,
   handleNativeInteraction,
-  handleAddressInput,
   handleRazorpayWebhook
 };
