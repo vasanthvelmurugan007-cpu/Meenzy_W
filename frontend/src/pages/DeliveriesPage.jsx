@@ -387,9 +387,8 @@ export default function DeliveriesPage() {
 
         <div style={{ height: 400, borderRadius: 8, overflow: 'hidden', position: 'relative', border: `1px solid ${C.border}` }}>
           <Map
-            {...viewState}
+            initialViewState={viewState}
             onLoad={e => e.target.resize()}
-            onMove={evt => setViewState(evt.viewState)}
             mapStyle={showHeatmap ? 'mapbox://styles/mapbox/dark-v11' : 'mapbox://styles/mapbox/streets-v12'}
             mapboxAccessToken={import.meta.env.VITE_MAPBOX_TOKEN}
             style={{ width: '100%', height: '100%' }}
