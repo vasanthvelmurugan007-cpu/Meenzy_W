@@ -172,10 +172,27 @@ function getHandleForExtractedItem(itemName) {
   return null;
 }
 
+function getAllMatchesForExtractedItem(itemName) {
+  const catalog = loadCatalog();
+  if (!catalog) return [];
+  
+  const query = itemName.toLowerCase();
+  const matches = [];
+  
+  for (const key of Object.keys(catalog)) {
+    const baseNames = key.toLowerCase().split('/').map(s => s.trim());
+    if (baseNames.some(n => query.includes(n) || n.includes(query))) {
+      matches.push(catalog[key]);
+    }
+  }
+  return matches;
+}
+
 module.exports = {
   loadCatalog,
   getPriceForExtractedItem,
   getCutOptionsForExtractedItem,
   getImageUrlForExtractedItem,
-  getHandleForExtractedItem
+  getHandleForExtractedItem,
+  getAllMatchesForExtractedItem
 };

@@ -1,52 +1,177 @@
 const pool = require('../db');
 const { insertPendingRow } = require('../services/messageSender');
 const { enqueueSend } = require('../queue/sendQueue');
-const { getPriceForExtractedItem, getCutOptionsForExtractedItem, getImageUrlForExtractedItem } = require('../catalogParser');
+const { getAllMatchesForExtractedItem } = require('../catalogParser');
 const { createPaymentLink } = require('../services/razorpayService');
 
+// Advanced Native checkout implementation
 
-// Native checkout implementation (Wix cart link functionality removed)
-
-// Start the conversational order flow (Repurposed to send Wix search links instead)
 async function startNativeOrderFlow(whatsappId, account, items) {
-  let text = "🐟 *Direct Purchase Links*\n\nYou can complete your purchase directly on our website using the links below:\n\n";
-
-  for (const o of items) {
-    const searchQuery = encodeURIComponent(o.item);
-    text += `🛒 *${o.item.toUpperCase()}*\n👉 https://www.meenzy.in/search-results?q=${searchQuery}\n\n`;
+  if (!items || items.length === 0) return;
+  const requestedItem = items[0].item;
+  
+  const matches = getAllMatchesForExtractedItem(requestedItem);
+  if (matches.length === 0) {
+    const text = `Sorry, we couldn't find any exact matches for *${requestedItem}* in our catalog today. Please check our website https://www.meenzy.in`;
+    const localId = await insertPendingRow({ account, toNumber: whatsappId, messageType: 'text', messageBody: text });
+    await enqueueSend({ kind: 'text', accountId: account.id, to: String(whatsappId).replace(/\D/g, ''), localMessageId: localId, payload: { body: text, previewUrl: true } });
+    return;
   }
+  
+  // Create state context
+  const stateContext = {
+    searchQuery: requestedItem,
+    matches: matches,
+    selectedProduct: null,
+    selectedCut: null,
+    selectedQty: null
+  };
 
-  const localId = await insertPendingRow({ account, toNumber: whatsappId, messageType: 'text', messageBody: text });
-  await enqueueSend({ kind: 'text', accountId: account.id, to: String(whatsappId).replace(/\D/g, ''), localMessageId: localId, payload: { body: text, previewUrl: true } });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`
+      INSERT INTO coexistence.meenzy_carts (whatsapp_id, current_state, state_context, status, cart_items, updated_at)
+      VALUES ($1, 'AWAITING_PRODUCT', $2, 'active', '[]'::jsonb, now())
+      ON CONFLICT (whatsapp_id) 
+      DO UPDATE SET 
+        current_state = 'AWAITING_PRODUCT', 
+        state_context = $2,
+        status = 'active',
+        cart_items = '[]'::jsonb,
+        updated_at = now()
+    `, [whatsappId, JSON.stringify(stateContext)]);
+    await client.query('COMMIT');
+    
+    // If only 1 match, auto-select it and skip to variants/quantity
+    if (matches.length === 1) {
+       await handleProductSelection(whatsappId, account, 0);
+       return;
+    }
+
+    // Send List Message for multiple matches
+    const rows = matches.slice(0, 10).map((m, idx) => ({
+      id: `C_PROD:${idx}`,
+      title: m.name.substring(0, 24),
+      description: `₹${m.pricePerKg}`.substring(0, 72)
+    }));
+    
+    const payload = {
+      type: "list",
+      header: { type: "text", text: `🐟 Select Product` },
+      body: { text: `We found a few options for *${requestedItem}*. Please pick one:` },
+      action: { button: "Options", sections: [{ title: "Available Items", rows }] }
+    };
+    
+    const localId = await insertPendingRow({ account, toNumber: whatsappId, messageType: 'interactive', messageBody: 'Select Product' });
+    await enqueueSend({ kind: 'interactive', accountId: account.id, to: String(whatsappId).replace(/\D/g, ''), localMessageId: localId, payload: { interactive: payload } });
+
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[nativeOrderEngine] start Error:', err);
+  } finally {
+    client.release();
+  }
 }
 
-async function askForCut(whatsappId, account, item, index) {
-  const text = `🐟 *${item.name}*\n\nPlease select how you want this cut:`;
-  const buttons = item.availableCuts.slice(0, 3).map((cut, idx) => ({
-    type: "reply",
-    reply: {
-      id: `C_CUT:${index}:${idx}`,
-      title: cut.substring(0, 20)
+async function handleProductSelection(whatsappId, account, matchIndex) {
+  const client = await pool.connect();
+  try {
+    const { rows } = await client.query(`SELECT state_context FROM coexistence.meenzy_carts WHERE whatsapp_id = $1 AND status = 'active'`, [whatsappId]);
+    if (rows.length === 0) return;
+    
+    const context = rows[0].state_context;
+    const selectedProduct = context.matches[matchIndex];
+    if (!selectedProduct) return;
+    
+    context.selectedProduct = selectedProduct;
+    
+    // Check if it has cuts
+    if (selectedProduct.cutOptions && selectedProduct.cutOptions.length > 0) {
+      await client.query(`UPDATE coexistence.meenzy_carts SET current_state = 'AWAITING_VARIANTS', state_context = $1, updated_at = now() WHERE whatsapp_id = $2`, [JSON.stringify(context), whatsappId]);
+      await askForCut(whatsappId, account, selectedProduct);
+    } else {
+      await client.query(`UPDATE coexistence.meenzy_carts SET current_state = 'AWAITING_QUANTITY', state_context = $1, updated_at = now() WHERE whatsapp_id = $2`, [JSON.stringify(context), whatsappId]);
+      await askForQuantity(whatsappId, account, selectedProduct);
     }
+  } finally {
+    client.release();
+  }
+}
+
+async function askForCut(whatsappId, account, item) {
+  const text = `🐟 *${item.name}*\n\nPlease select how you want this cut:`;
+  const buttons = item.cutOptions.slice(0, 3).map((cut, idx) => ({
+    type: "reply",
+    reply: { id: `C_CUT:${idx}`, title: cut.substring(0, 20) }
   }));
 
-  const imageUrl = getImageUrlForExtractedItem(item.name);
-
-  const payload = {
-    type: "button",
-    body: { text },
-    action: { buttons }
-  };
+  const payload = { type: "button", body: { text }, action: { buttons } };
   
-  if (imageUrl) {
-    payload.header = {
-      type: "image",
-      image: { link: imageUrl }
-    };
+  if (item.imageUrl) {
+    payload.header = { type: "image", image: { link: item.imageUrl } };
   }
 
   const localId = await insertPendingRow({ account, toNumber: whatsappId, messageType: 'interactive', messageBody: 'Select Cut' });
   await enqueueSend({ kind: 'interactive', accountId: account.id, to: String(whatsappId).replace(/\D/g, ''), localMessageId: localId, payload: { interactive: payload } });
+}
+
+async function handleCutSelection(whatsappId, account, cutIndex) {
+  const client = await pool.connect();
+  try {
+    const { rows } = await client.query(`SELECT state_context FROM coexistence.meenzy_carts WHERE whatsapp_id = $1 AND status = 'active'`, [whatsappId]);
+    if (rows.length === 0) return;
+    
+    const context = rows[0].state_context;
+    const selectedProduct = context.selectedProduct;
+    if (!selectedProduct) return;
+    
+    context.selectedCut = selectedProduct.cutOptions[cutIndex];
+    
+    await client.query(`UPDATE coexistence.meenzy_carts SET current_state = 'AWAITING_QUANTITY', state_context = $1, updated_at = now() WHERE whatsapp_id = $2`, [JSON.stringify(context), whatsappId]);
+    await askForQuantity(whatsappId, account, selectedProduct);
+  } finally {
+    client.release();
+  }
+}
+
+async function askForQuantity(whatsappId, account, item) {
+  const text = `⚖️ Please select the quantity for *${item.name}*:`;
+  const buttons = [
+    { type: "reply", reply: { id: `C_QTY:0.5`, title: "0.5 Kg" } },
+    { type: "reply", reply: { id: `C_QTY:1`, title: "1 Kg" } },
+    { type: "reply", reply: { id: `C_QTY:2`, title: "2 Kg" } }
+  ];
+
+  const payload = { type: "button", body: { text }, action: { buttons } };
+  
+  const localId = await insertPendingRow({ account, toNumber: whatsappId, messageType: 'interactive', messageBody: 'Select Quantity' });
+  await enqueueSend({ kind: 'interactive', accountId: account.id, to: String(whatsappId).replace(/\D/g, ''), localMessageId: localId, payload: { interactive: payload } });
+}
+
+async function handleQuantitySelection(whatsappId, account, qty) {
+  const client = await pool.connect();
+  try {
+    const { rows } = await client.query(`SELECT state_context FROM coexistence.meenzy_carts WHERE whatsapp_id = $1 AND status = 'active'`, [whatsappId]);
+    if (rows.length === 0) return;
+    
+    const context = rows[0].state_context;
+    context.selectedQty = parseFloat(qty) || 1;
+    
+    // Add to cart_items format to retain compatibility with CART_REVIEW
+    const cartItem = {
+      name: context.selectedProduct.name,
+      qty: context.selectedQty,
+      pricePerKg: context.selectedProduct.pricePerKg,
+      selectedCut: context.selectedCut
+    };
+    context.items = [cartItem];
+
+    await client.query(`UPDATE coexistence.meenzy_carts SET current_state = 'CART_REVIEW', state_context = $1, updated_at = now() WHERE whatsapp_id = $2`, [JSON.stringify(context), whatsappId]);
+    await sendCartSummaryAndAskAddress(whatsappId, account, context);
+  } finally {
+    client.release();
+  }
 }
 
 async function sendCartSummaryAndAskAddress(whatsappId, account, context) {
@@ -209,75 +334,37 @@ async function generatePaymentLinkAndSend(whatsappId, account, context) {
 
 async function handleNativeInteraction(whatsappId, account, cart, incomingPayload, incomingText) {
   const context = cart.state_context || {};
-  const items = context.items || [];
-  const nativeState = context.native_state;
 
-  if (cart.current_state === 'CART_REVIEW' && nativeState === 'AWAITING_CUT') {
-    if (incomingPayload && incomingPayload.startsWith('C_CUT:')) {
-      const parts = incomingPayload.split(':');
-      const itemIdx = parseInt(parts[1], 10);
-      const cutIdx = parseInt(parts[2], 10);
-      
-      if (items[itemIdx] && items[itemIdx].availableCuts[cutIdx]) {
-        items[itemIdx].selectedCut = items[itemIdx].availableCuts[cutIdx];
-        
-        // Find next item needing cut
-        const nextItemNeedingCutIndex = items.findIndex((i, idx) => idx > itemIdx && i.availableCuts && i.availableCuts.length > 0 && !i.selectedCut);
-        
-        const client = await pool.connect();
-        try {
-          if (nextItemNeedingCutIndex !== -1) {
-            context.currentItemIndex = nextItemNeedingCutIndex;
-            await client.query(`UPDATE coexistence.meenzy_carts SET state_context = $1 WHERE whatsapp_id = $2 AND status = 'active'`, [JSON.stringify(context), whatsappId]);
-            await askForCut(whatsappId, account, items[nextItemNeedingCutIndex], nextItemNeedingCutIndex);
-          } else {
-            // All cuts done! Ask for address
-            context.currentItemIndex = -1;
-            context.native_state = 'AWAITING_ADDRESS';
-            await client.query(`UPDATE coexistence.meenzy_carts SET state_context = $1 WHERE whatsapp_id = $2 AND status = 'active'`, [JSON.stringify(context), whatsappId]);
-            await sendCartSummaryAndAskAddress(whatsappId, account, context);
-          }
-        } finally {
-          client.release();
-        }
-        return true;
-      }
-    }
-    return false;
-  } else if (cart.current_state === 'CART_REVIEW' && nativeState === 'AWAITING_ADDRESS') {
+  if (cart.current_state === 'AWAITING_PRODUCT' && incomingPayload && incomingPayload.startsWith('C_PROD:')) {
+    const idx = parseInt(incomingPayload.split(':')[1], 10);
+    await handleProductSelection(whatsappId, account, idx);
+    return true;
+  }
+
+  if (cart.current_state === 'AWAITING_VARIANTS' && incomingPayload && incomingPayload.startsWith('C_CUT:')) {
+    const idx = parseInt(incomingPayload.split(':')[1], 10);
+    await handleCutSelection(whatsappId, account, idx);
+    return true;
+  }
+  
+  if (cart.current_state === 'AWAITING_QUANTITY' && incomingPayload && incomingPayload.startsWith('C_QTY:')) {
+    const qty = incomingPayload.split(':')[1];
+    await handleQuantitySelection(whatsappId, account, qty);
+    return true;
+  }
+
+  if (cart.current_state === 'CART_REVIEW') {
     if (incomingText && incomingText.trim().length > 5) {
       context.address = incomingText.trim();
-      context.native_state = 'AWAITING_PAYMENT_METHOD';
       const client = await pool.connect();
       try {
-        await client.query(`UPDATE coexistence.meenzy_carts SET state_context = $1 WHERE whatsapp_id = $2 AND status = 'active'`, [JSON.stringify(context), whatsappId]);
-      } finally {
-        client.release();
-      }
-      
-      await askForPaymentMethod(whatsappId, account);
-      return true;
-    } else {
-      const localId = await insertPendingRow({ account, toNumber: whatsappId, messageType: 'text', messageBody: 'Invalid Address' });
-      await enqueueSend({ kind: 'text', accountId: account.id, to: String(whatsappId).replace(/\D/g, ''), localMessageId: localId, payload: { body: "Please provide a valid delivery address.", previewUrl: false } });
-      return true;
-    }
-  } else if (cart.current_state === 'CART_REVIEW' && nativeState === 'AWAITING_PAYMENT_METHOD') {
-    if (incomingPayload === 'PAY_ONLINE') {
-      context.native_state = 'AWAITING_PAYMENT';
-      const client = await pool.connect();
-      try {
-        await client.query(`UPDATE coexistence.meenzy_carts SET state_context = $1 WHERE whatsapp_id = $2 AND status = 'active'`, [JSON.stringify(context), whatsappId]);
+        await client.query(`UPDATE coexistence.meenzy_carts SET current_state = 'AWAITING_PAYMENT', state_context = $1 WHERE whatsapp_id = $2 AND status = 'active'`, [JSON.stringify(context), whatsappId]);
       } finally {
         client.release();
       }
       await generatePaymentLinkAndSend(whatsappId, account, context);
       return true;
-    } else if (incomingPayload === 'PAY_COD') {
-      await finalizeCODOrder(whatsappId, account, context);
-      return true;
     }
-    return false;
   }
 
   return false;
@@ -285,5 +372,10 @@ async function handleNativeInteraction(whatsappId, account, cart, incomingPayloa
 
 module.exports = {
   startNativeOrderFlow,
-  handleNativeInteraction
+  handleProductSelection,
+  handleCutSelection,
+  handleQuantitySelection,
+  handleNativeInteraction,
+  handleAddressInput,
+  handleRazorpayWebhook
 };
