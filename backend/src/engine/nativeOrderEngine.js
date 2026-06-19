@@ -137,7 +137,7 @@ async function finalizeCODOrder(whatsappId, account, context) {
       
       await client.query(`
         INSERT INTO coexistence.meenzy_preorders (customer_phone, ordered_item, quantity, order_status, address_line, payment_status)
-        VALUES ($1, $2, $3, 'CONFIRMED', $4, 'COD')
+        VALUES ($1, $2, $3, 'pending_market', $4, 'COD')
       `, [whatsappId, itemName, item.qty, address]);
     }
 
@@ -152,7 +152,7 @@ async function finalizeCODOrder(whatsappId, account, context) {
     await client.query(`
       INSERT INTO coexistence.ecosystem_orders 
       (user_phone, total_amount, status, payment_status, source, address_line, order_items)
-      VALUES ($1, $2, 'CONFIRMED', 'COD', 'WHATSAPP_NATIVE', $3, $4::jsonb)
+      VALUES ($1, $2, 'CREATED', 'COD', 'WHATSAPP_NATIVE', $3, $4::jsonb)
     `, [whatsappId, totalAmount, address, orderItemsJson]);
 
     await client.query(`
