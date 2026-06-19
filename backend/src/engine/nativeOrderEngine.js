@@ -104,6 +104,77 @@ async function sendCartSummaryAndAskAddress(whatsappId, account, context) {
   await enqueueSend({ kind: 'text', accountId: account.id, to: String(whatsappId).replace(/\D/g, ''), localMessageId: localId, payload: { body: summaryText, previewUrl: false } });
 }
 
+async function askForPaymentMethod(whatsappId, account) {
+  const text = `How would you like to pay?`;
+  const buttons = [
+    { type: "reply", reply: { id: "PAY_ONLINE", title: "Pay Online Now" } },
+    { type: "reply", reply: { id: "PAY_COD", title: "Cash on Delivery" } }
+  ];
+
+  const payload = {
+    type: "button",
+    body: { text },
+    action: { buttons }
+  };
+
+  const localId = await insertPendingRow({ account, toNumber: whatsappId, messageType: 'interactive', messageBody: 'Payment Method' });
+  await enqueueSend({ kind: 'interactive', accountId: account.id, to: String(whatsappId).replace(/\D/g, ''), localMessageId: localId, payload: { interactive: payload } });
+}
+
+async function finalizeCODOrder(whatsappId, account, context) {
+  const items = context.items || [];
+  const address = context.address;
+  let totalAmount = 0;
+  
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    
+    for (const item of items) {
+      totalAmount += item.qty * item.pricePerKg;
+      const cutText = item.selectedCut ? ` (${item.selectedCut})` : '';
+      const itemName = `${item.name}${cutText}`;
+      
+      await client.query(`
+        INSERT INTO coexistence.meenzy_preorders (customer_phone, ordered_item, quantity, order_status, address_line)
+        VALUES ($1, $2, $3, 'CONFIRMED', $4)
+      `, [whatsappId, itemName, item.qty, address]);
+    }
+
+    const orderItemsJson = JSON.stringify(items.map(i => ({
+      product_id: i.name,
+      name: i.name,
+      quantity: i.qty,
+      price: i.pricePerKg,
+      cut: i.selectedCut
+    })));
+
+    await client.query(`
+      INSERT INTO coexistence.ecosystem_orders 
+      (user_phone, total_amount, status, payment_status, source, address_line, order_items)
+      VALUES ($1, $2, 'CONFIRMED', 'COD', 'WHATSAPP_NATIVE', $3, $4::jsonb)
+    `, [whatsappId, totalAmount, address, orderItemsJson]);
+
+    await client.query(`
+      UPDATE coexistence.meenzy_carts 
+      SET current_state = 'COMPLETED', status = 'converted', updated_at = NOW()
+      WHERE whatsapp_id = $1 AND current_state = 'CART_REVIEW' AND status = 'active'
+    `, [whatsappId]);
+
+    await client.query('COMMIT');
+
+    const successMsg = `🎉 *Order Confirmed!*\n\nYour Cash on Delivery order is confirmed and will be delivered to:\n_${address}_\n\nAmount to pay on delivery: ₹${totalAmount}\n\nThank you for choosing Meenzy Fresh Seafood! 🐟`;
+    const localId = await insertPendingRow({ account, toNumber: whatsappId, messageType: 'text', messageBody: successMsg });
+    await enqueueSend({ kind: 'text', accountId: account.id, to: String(whatsappId).replace(/\D/g, ''), localMessageId: localId, payload: { body: successMsg, previewUrl: false } });
+
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[nativeOrderEngine] DB Error saving COD order:', err);
+  } finally {
+    client.release();
+  }
+}
+
 async function generatePaymentLinkAndSend(whatsappId, account, context) {
   const items = context.items || [];
   let total = 0;
@@ -179,7 +250,7 @@ async function handleNativeInteraction(whatsappId, account, cart, incomingPayloa
   } else if (cart.current_state === 'CART_REVIEW' && nativeState === 'AWAITING_ADDRESS') {
     if (incomingText && incomingText.trim().length > 5) {
       context.address = incomingText.trim();
-      context.native_state = 'AWAITING_PAYMENT';
+      context.native_state = 'AWAITING_PAYMENT_METHOD';
       const client = await pool.connect();
       try {
         await client.query(`UPDATE coexistence.meenzy_carts SET state_context = $1 WHERE whatsapp_id = $2 AND status = 'active'`, [JSON.stringify(context), whatsappId]);
@@ -187,13 +258,29 @@ async function handleNativeInteraction(whatsappId, account, cart, incomingPayloa
         client.release();
       }
       
-      await generatePaymentLinkAndSend(whatsappId, account, context);
+      await askForPaymentMethod(whatsappId, account);
       return true;
     } else {
       const localId = await insertPendingRow({ account, toNumber: whatsappId, messageType: 'text', messageBody: 'Invalid Address' });
       await enqueueSend({ kind: 'text', accountId: account.id, to: String(whatsappId).replace(/\D/g, ''), localMessageId: localId, payload: { body: "Please provide a valid delivery address.", previewUrl: false } });
       return true;
     }
+  } else if (cart.current_state === 'CART_REVIEW' && nativeState === 'AWAITING_PAYMENT_METHOD') {
+    if (incomingPayload === 'PAY_ONLINE') {
+      context.native_state = 'AWAITING_PAYMENT';
+      const client = await pool.connect();
+      try {
+        await client.query(`UPDATE coexistence.meenzy_carts SET state_context = $1 WHERE whatsapp_id = $2 AND status = 'active'`, [JSON.stringify(context), whatsappId]);
+      } finally {
+        client.release();
+      }
+      await generatePaymentLinkAndSend(whatsappId, account, context);
+      return true;
+    } else if (incomingPayload === 'PAY_COD') {
+      await finalizeCODOrder(whatsappId, account, context);
+      return true;
+    }
+    return false;
   }
 
   return false;
