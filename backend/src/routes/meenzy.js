@@ -398,14 +398,14 @@ router.get('/meenzy/preorders', async (req, res) => {
                    AND i.product_name ILIKE '%' || p.ordered_item || '%'
                  ORDER BY o.created_at DESC LIMIT 1
                 ),
-                p.payment_status
+                'COD'
               ) as true_payment_status
        FROM coexistence.meenzy_preorders p 
        ORDER BY p.created_at DESC`
     );
     const rows = preorders.rows.map(r => ({
       ...r,
-      payment_status: r.true_payment_status || r.payment_status
+      payment_status: r.true_payment_status || r.payment_status || 'COD'
     }));
     res.json(rows);
   } catch (err) {

@@ -52,7 +52,7 @@ router.get('/meenzy/dashboard/stats', async (req, res) => {
                     AND i.product_name ILIKE '%' || p.ordered_item || '%'
                   ORDER BY o.created_at DESC LIMIT 1
                  ),
-                 p.payment_status
+                 'COD'
                ) as payment_status
         FROM coexistence.meenzy_preorders p
         LEFT JOIN coexistence.meenzy_delivery_agents a ON p.driver_id = a.id
