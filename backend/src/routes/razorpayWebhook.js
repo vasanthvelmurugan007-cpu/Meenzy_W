@@ -54,11 +54,14 @@ router.post('/', async (req, res) => {
             
             // 1. Insert into preorders
             try {
+              await client.query('SAVEPOINT check_col');
               await client.query(`
                 INSERT INTO coexistence.meenzy_preorders (customer_phone, ordered_item, quantity, order_status, address_line, payment_status)
                 VALUES ($1, $2, $3, 'CONFIRMED', $4, 'ONLINE')
               `, [customerPhone, itemName, item.qty, address]);
+              await client.query('RELEASE SAVEPOINT check_col');
             } catch (insertErr) {
+              await client.query('ROLLBACK TO SAVEPOINT check_col');
               if (insertErr.code === '42703') { // undefined_column
                 await client.query(`
                   INSERT INTO coexistence.meenzy_preorders (customer_phone, ordered_item, quantity, order_status, address_line)
@@ -80,12 +83,15 @@ router.post('/', async (req, res) => {
           })));
 
           try {
+            await client.query('SAVEPOINT check_eco');
             await client.query(`
               INSERT INTO coexistence.ecosystem_orders 
               (user_phone, total_amount, status, payment_status, source, address_line, order_items)
               VALUES ($1, $2, 'CONFIRMED', 'PAID', 'WHATSAPP_NATIVE', $3, $4::jsonb)
             `, [customerPhone, totalAmount, address, orderItemsJson]);
+            await client.query('RELEASE SAVEPOINT check_eco');
           } catch (ecoErr) {
+            await client.query('ROLLBACK TO SAVEPOINT check_eco');
             if (ecoErr.code === '42703') { // undefined_column
               await client.query(`
                 INSERT INTO coexistence.ecosystem_orders 

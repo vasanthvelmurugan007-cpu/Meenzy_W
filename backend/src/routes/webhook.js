@@ -2061,13 +2061,16 @@ router.post('/webhook/wix-order', async (req, res) => {
 
     let savedOrder;
     try {
+      await client.query('SAVEPOINT eco_check');
       const res = await client.query(`
         INSERT INTO coexistence.ecosystem_orders (wix_order_id, user_phone, total_price, status, address_line, lat, lng, delivery_otp, payment_status)
         VALUES ($1, $2, $3, 'CREATED', $4, $5, $6, $7, $8)
         RETURNING id
       `, [String(orderId), String(phone), total, addressLine, lat, lng, otp, finalPaymentStatus]);
       savedOrder = res.rows;
+      await client.query('RELEASE SAVEPOINT eco_check');
     } catch (insertErr) {
+      await client.query('ROLLBACK TO SAVEPOINT eco_check');
       if (insertErr.code === '42703') {
         const res = await client.query(`
           INSERT INTO coexistence.ecosystem_orders (wix_order_id, user_phone, total_price, status, address_line, lat, lng, delivery_otp)
@@ -2095,11 +2098,14 @@ router.post('/webhook/wix-order', async (req, res) => {
 
       // Sync to Preorders page with OTP
       try {
+        await client.query('SAVEPOINT preorders_check');
         await client.query(`
           INSERT INTO coexistence.meenzy_preorders (customer_phone, ordered_item, quantity, order_status, otp, payment_status)
           VALUES ($1, $2, $3, 'pending_market', $4, $5)
         `, [String(phone).replace(/\D/g, ''), name, qty, otp, finalPaymentStatus]);
+        await client.query('RELEASE SAVEPOINT preorders_check');
       } catch (insertErr) {
+        await client.query('ROLLBACK TO SAVEPOINT preorders_check');
         if (insertErr.code === '42703') {
           await client.query(`
             INSERT INTO coexistence.meenzy_preorders (customer_phone, ordered_item, quantity, order_status, otp)

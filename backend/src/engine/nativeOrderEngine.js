@@ -136,11 +136,14 @@ async function finalizeCODOrder(whatsappId, account, context) {
       const itemName = `${item.name}${cutText}`;
       
       try {
+        await client.query('SAVEPOINT check_col');
         await client.query(`
           INSERT INTO coexistence.meenzy_preorders (customer_phone, ordered_item, quantity, order_status, address_line, payment_status)
           VALUES ($1, $2, $3, 'pending_market', $4, 'COD')
         `, [whatsappId, itemName, item.qty, address]);
+        await client.query('RELEASE SAVEPOINT check_col');
       } catch (insertErr) {
+        await client.query('ROLLBACK TO SAVEPOINT check_col');
         if (insertErr.code === '42703') { // undefined_column
           await client.query(`
             INSERT INTO coexistence.meenzy_preorders (customer_phone, ordered_item, quantity, order_status, address_line)
@@ -161,12 +164,15 @@ async function finalizeCODOrder(whatsappId, account, context) {
     })));
 
     try {
+      await client.query('SAVEPOINT check_eco');
       await client.query(`
         INSERT INTO coexistence.ecosystem_orders 
         (user_phone, total_amount, status, payment_status, source, address_line, order_items)
         VALUES ($1, $2, 'CREATED', 'COD', 'WHATSAPP_NATIVE', $3, $4::jsonb)
       `, [whatsappId, totalAmount, address, orderItemsJson]);
+      await client.query('RELEASE SAVEPOINT check_eco');
     } catch (ecoErr) {
+      await client.query('ROLLBACK TO SAVEPOINT check_eco');
       if (ecoErr.code === '42703') { // undefined_column
         await client.query(`
           INSERT INTO coexistence.ecosystem_orders 
