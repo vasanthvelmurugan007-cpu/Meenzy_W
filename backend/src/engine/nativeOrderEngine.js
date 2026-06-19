@@ -7,65 +7,23 @@ const { createPaymentLink } = require('../services/razorpayService');
 
 // Native checkout implementation (Wix cart link functionality removed)
 
-// Start the conversational order flow
+// Start the conversational order flow (Repurposed to send Wix product links instead)
 async function startNativeOrderFlow(whatsappId, account, items) {
-  // Items come from LLM: [{ item: 'vanjaram', qty: 1 }]
-  
-  const orderItems = items.map(o => {
-    const qty = parseFloat(o.qty) || 1;
-    const pricePerKg = getPriceForExtractedItem(o.item);
-    const cuts = getCutOptionsForExtractedItem(o.item);
-    return {
-      name: o.item,
-      qty,
-      pricePerKg,
-      availableCuts: cuts,
-      selectedCut: null
-    };
-  });
+  let text = "🐟 *Direct Purchase Links*\n\nYou can complete your purchase directly on our website using the links below:\n\n";
 
-  // Check if any item needs a cut selection
-  const itemNeedingCutIndex = orderItems.findIndex(i => i.availableCuts && i.availableCuts.length > 0);
-
-  const stateContext = {
-    items: orderItems,
-    currentItemIndex: itemNeedingCutIndex,
-    native_state: itemNeedingCutIndex !== -1 ? 'AWAITING_CUT' : 'AWAITING_ADDRESS'
-  };
-
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
+  for (const o of items) {
+    const { getHandleForExtractedItem } = require('../catalogParser');
+    const handle = getHandleForExtractedItem(o.item);
     
-    // Create or update cart for native order flow using a valid enum state (CART_REVIEW)
-    await client.query(`
-      INSERT INTO coexistence.meenzy_carts (whatsapp_id, current_state, state_context, status, cart_items, updated_at)
-      VALUES ($1, 'CART_REVIEW', $2, 'active', '[]'::jsonb, now())
-      ON CONFLICT (whatsapp_id) 
-      DO UPDATE SET 
-        current_state = 'CART_REVIEW', 
-        state_context = $2,
-        status = 'active',
-        cart_items = '[]'::jsonb,
-        updated_at = now()
-    `, [whatsappId, JSON.stringify(stateContext)]);
-    
-    await client.query('COMMIT');
-
-    // Prompt user for cut if needed
-    if (itemNeedingCutIndex !== -1) {
-      await askForCut(whatsappId, account, orderItems[itemNeedingCutIndex], itemNeedingCutIndex);
+    if (handle) {
+      text += `🛒 *${o.item.toUpperCase()}*\n👉 https://www.meenzy.in/product-page/${handle}\n\n`;
     } else {
-      // No cuts needed, summarize cart and ask for address
-      await sendCartSummaryAndAskAddress(whatsappId, account, stateContext);
+      text += `🛒 *${o.item.toUpperCase()}*\n👉 Please check our full catalog: https://www.meenzy.in\n\n`;
     }
-
-  } catch (err) {
-    await client.query('ROLLBACK');
-    console.error('[nativeOrderEngine] startNativeOrderFlow Error:', err);
-  } finally {
-    client.release();
   }
+
+  const localId = await insertPendingRow({ account, toNumber: whatsappId, messageType: 'text', messageBody: text });
+  await enqueueSend({ kind: 'text', accountId: account.id, to: String(whatsappId).replace(/\D/g, ''), localMessageId: localId, payload: { body: text, previewUrl: true } });
 }
 
 async function askForCut(whatsappId, account, item, index) {

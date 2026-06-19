@@ -70,7 +70,8 @@ function loadCatalog() {
                 name: currentProductName,
                 pricePerKg: 0,
                 cutOptions: cuts,
-                imageUrl: null
+                imageUrl: null,
+                handle: handle
             };
         } else {
             catalogMap[currentProductName].cutOptions = cuts;
@@ -156,9 +157,25 @@ function getImageUrlForExtractedItem(itemName) {
   return null;
 }
 
+function getHandleForExtractedItem(itemName) {
+  const catalog = loadCatalog();
+  if (!catalog) return null;
+  
+  const query = itemName.toLowerCase();
+  
+  for (const key of Object.keys(catalog)) {
+    const baseNames = key.toLowerCase().split('/').map(s => s.trim());
+    if (baseNames.some(n => query.includes(n) || n.includes(query))) {
+      return catalog[key].handle || null;
+    }
+  }
+  return null;
+}
+
 module.exports = {
   loadCatalog,
   getPriceForExtractedItem,
   getCutOptionsForExtractedItem,
-  getImageUrlForExtractedItem
+  getImageUrlForExtractedItem,
+  getHandleForExtractedItem
 };
