@@ -2059,11 +2059,26 @@ router.post('/webhook/wix-order', async (req, res) => {
     const paymentMethod = order.billingInfo?.paymentMethod || '';
     const finalPaymentStatus = (paymentStatusRaw === 'PAID' || paymentStatusRaw === 'FULLY_PAID') ? 'ONLINE' : (paymentMethod.toLowerCase().includes('offline') || paymentMethod.toLowerCase().includes('cash')) ? 'COD' : 'UNKNOWN';
 
-    const { rows: savedOrder } = await client.query(`
-      INSERT INTO coexistence.ecosystem_orders (wix_order_id, user_phone, total_price, status, address_line, lat, lng, delivery_otp, payment_status)
-      VALUES ($1, $2, $3, 'CREATED', $4, $5, $6, $7, $8)
-      RETURNING id
-    `, [String(orderId), String(phone), total, addressLine, lat, lng, otp, finalPaymentStatus]);
+    let savedOrder;
+    try {
+      const res = await client.query(`
+        INSERT INTO coexistence.ecosystem_orders (wix_order_id, user_phone, total_price, status, address_line, lat, lng, delivery_otp, payment_status)
+        VALUES ($1, $2, $3, 'CREATED', $4, $5, $6, $7, $8)
+        RETURNING id
+      `, [String(orderId), String(phone), total, addressLine, lat, lng, otp, finalPaymentStatus]);
+      savedOrder = res.rows;
+    } catch (insertErr) {
+      if (insertErr.code === '42703') {
+        const res = await client.query(`
+          INSERT INTO coexistence.ecosystem_orders (wix_order_id, user_phone, total_price, status, address_line, lat, lng, delivery_otp)
+          VALUES ($1, $2, $3, 'CREATED', $4, $5, $6, $7)
+          RETURNING id
+        `, [String(orderId), String(phone), total, addressLine, lat, lng, otp]);
+        savedOrder = res.rows;
+      } else {
+        throw insertErr;
+      }
+    }
 
     const internalOrderId = savedOrder[0].id;
 
@@ -2079,10 +2094,21 @@ router.post('/webhook/wix-order', async (req, res) => {
       `, [internalOrderId, name, qty, price]);
 
       // Sync to Preorders page with OTP
-      await client.query(`
-        INSERT INTO coexistence.meenzy_preorders (customer_phone, ordered_item, quantity, order_status, otp, payment_status)
-        VALUES ($1, $2, $3, 'pending_market', $4, $5)
-      `, [String(phone).replace(/\D/g, ''), name, qty, otp, finalPaymentStatus]);
+      try {
+        await client.query(`
+          INSERT INTO coexistence.meenzy_preorders (customer_phone, ordered_item, quantity, order_status, otp, payment_status)
+          VALUES ($1, $2, $3, 'pending_market', $4, $5)
+        `, [String(phone).replace(/\D/g, ''), name, qty, otp, finalPaymentStatus]);
+      } catch (insertErr) {
+        if (insertErr.code === '42703') {
+          await client.query(`
+            INSERT INTO coexistence.meenzy_preorders (customer_phone, ordered_item, quantity, order_status, otp)
+            VALUES ($1, $2, $3, 'pending_market', $4)
+          `, [String(phone).replace(/\D/g, ''), name, qty, otp]);
+        } else {
+          throw insertErr;
+        }
+      }
 
       itemsSummary.push(`• *${name}* x${qty} - ₹${price}`);
     }

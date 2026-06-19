@@ -53,10 +53,21 @@ router.post('/', async (req, res) => {
             const itemName = `${item.name}${cutText}`;
             
             // 1. Insert into preorders
-            await client.query(`
-              INSERT INTO coexistence.meenzy_preorders (customer_phone, ordered_item, quantity, order_status, address_line, payment_status)
-              VALUES ($1, $2, $3, 'CONFIRMED', $4, 'ONLINE')
-            `, [customerPhone, itemName, item.qty, address]);
+            try {
+              await client.query(`
+                INSERT INTO coexistence.meenzy_preorders (customer_phone, ordered_item, quantity, order_status, address_line, payment_status)
+                VALUES ($1, $2, $3, 'CONFIRMED', $4, 'ONLINE')
+              `, [customerPhone, itemName, item.qty, address]);
+            } catch (insertErr) {
+              if (insertErr.code === '42703') { // undefined_column
+                await client.query(`
+                  INSERT INTO coexistence.meenzy_preorders (customer_phone, ordered_item, quantity, order_status, address_line)
+                  VALUES ($1, $2, $3, 'CONFIRMED', $4)
+                `, [customerPhone, itemName, item.qty, address]);
+              } else {
+                throw insertErr;
+              }
+            }
           }
 
           // 2. Insert into ecosystem_orders for unified dashboard

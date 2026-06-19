@@ -135,10 +135,21 @@ async function finalizeCODOrder(whatsappId, account, context) {
       const cutText = item.selectedCut ? ` (${item.selectedCut})` : '';
       const itemName = `${item.name}${cutText}`;
       
-      await client.query(`
-        INSERT INTO coexistence.meenzy_preorders (customer_phone, ordered_item, quantity, order_status, address_line, payment_status)
-        VALUES ($1, $2, $3, 'pending_market', $4, 'COD')
-      `, [whatsappId, itemName, item.qty, address]);
+      try {
+        await client.query(`
+          INSERT INTO coexistence.meenzy_preorders (customer_phone, ordered_item, quantity, order_status, address_line, payment_status)
+          VALUES ($1, $2, $3, 'pending_market', $4, 'COD')
+        `, [whatsappId, itemName, item.qty, address]);
+      } catch (insertErr) {
+        if (insertErr.code === '42703') { // undefined_column
+          await client.query(`
+            INSERT INTO coexistence.meenzy_preorders (customer_phone, ordered_item, quantity, order_status, address_line)
+            VALUES ($1, $2, $3, 'pending_market', $4)
+          `, [whatsappId, itemName, item.qty, address]);
+        } else {
+          throw insertErr;
+        }
+      }
     }
 
     const orderItemsJson = JSON.stringify(items.map(i => ({
