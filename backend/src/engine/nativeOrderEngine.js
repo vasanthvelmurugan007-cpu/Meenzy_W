@@ -163,22 +163,27 @@ async function finalizeCODOrder(whatsappId, account, context) {
       cut: i.selectedCut
     })));
 
+    const { geocodeAddress } = require('../services/geocoder');
+    const geo = await geocodeAddress(address);
+    const lat = geo ? geo.lat : null;
+    const lng = geo ? geo.lng : null;
+
     try {
       await client.query('SAVEPOINT check_eco');
       await client.query(`
         INSERT INTO coexistence.ecosystem_orders 
-        (user_phone, total_price, status, payment_status, source, address_line, order_items)
-        VALUES ($1, $2, 'CREATED', 'COD', 'WHATSAPP_NATIVE', $3, $4::jsonb)
-      `, [whatsappId, totalAmount, address, orderItemsJson]);
+        (user_phone, total_price, status, payment_status, source, address_line, order_items, lat, lng)
+        VALUES ($1, $2, 'CREATED', 'COD', 'WHATSAPP_NATIVE', $3, $4::jsonb, $5, $6)
+      `, [whatsappId, totalAmount, address, orderItemsJson, lat, lng]);
       await client.query('RELEASE SAVEPOINT check_eco');
     } catch (ecoErr) {
       await client.query('ROLLBACK TO SAVEPOINT check_eco');
       if (ecoErr.code === '42703') { // undefined_column
         await client.query(`
           INSERT INTO coexistence.ecosystem_orders 
-          (user_phone, total_price, status, address_line)
-          VALUES ($1, $2, 'CREATED', $3)
-        `, [whatsappId, totalAmount, address]);
+          (user_phone, total_price, status, address_line, lat, lng)
+          VALUES ($1, $2, 'CREATED', $3, $4, $5)
+        `, [whatsappId, totalAmount, address, lat, lng]);
       } else {
         throw ecoErr;
       }
