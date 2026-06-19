@@ -186,7 +186,7 @@ async function finalizeCODOrder(whatsappId, account, context) {
 
     await client.query(`
       UPDATE coexistence.meenzy_carts 
-      SET current_state = 'COMPLETED', status = 'converted', updated_at = NOW()
+      SET current_state = 'CHECKOUT', status = 'converted', updated_at = NOW()
       WHERE whatsapp_id = $1 AND current_state = 'CART_REVIEW' AND status = 'active'
     `, [whatsappId]);
 

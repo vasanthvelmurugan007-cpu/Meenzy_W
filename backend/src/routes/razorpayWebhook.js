@@ -103,10 +103,10 @@ router.post('/', async (req, res) => {
             }
           }
 
-          // 3. Mark cart as COMPLETED
+          // 3. Mark cart as CHECKOUT
           await client.query(`
             UPDATE coexistence.meenzy_carts 
-            SET current_state = 'COMPLETED', status = 'converted', updated_at = NOW()
+            SET current_state = 'CHECKOUT', status = 'converted', updated_at = NOW()
             WHERE whatsapp_id = $1 AND current_state = 'CART_REVIEW' AND state_context->>'native_state' = 'AWAITING_PAYMENT'
           `, [customerPhone]);
 

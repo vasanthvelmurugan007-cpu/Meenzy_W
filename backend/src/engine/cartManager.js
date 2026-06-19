@@ -353,13 +353,13 @@ async function handleCartState(whatsappId, account, incomingPayload) {
           [dateOffset, deliveryTime, whatsappId]
         );
         
-        // Finalize cart
-        await client.query(
-          `UPDATE coexistence.meenzy_carts 
-           SET status = 'converted', current_state = 'COMPLETED', updated_at = NOW() 
-           WHERE whatsapp_id = $1 AND status = 'active'`, 
-          [whatsappId]
-        );
+        // Finalize
+        const { rows } = await client.query(`
+          UPDATE coexistence.meenzy_carts
+           SET status = 'converted', current_state = 'CHECKOUT', updated_at = NOW() 
+         WHERE whatsapp_id = $1 AND status = 'active'
+         RETURNING *
+        `, [whatsappId]);
         
         await client.query('COMMIT');
         
