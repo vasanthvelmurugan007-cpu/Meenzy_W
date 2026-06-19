@@ -3,31 +3,7 @@ const { insertPendingRow } = require('../services/messageSender');
 const { enqueueSend } = require('../queue/sendQueue');
 const { getPriceForExtractedItem, getCutOptionsForExtractedItem } = require('../catalogParser');
 const { createPaymentLink } = require('../services/razorpayService');
-const { getProductId } = require('../services/wixProductMap');
-const { createWixCartLink } = require('../services/wixCartService');
-
-// Helper to resolve cut options to specific Wix product IDs
-function resolveWixProductId(itemName, cutStyle) {
-  if (!itemName) return null;
-  
-  let resolvedName = itemName;
-  if (cutStyle) {
-    resolvedName = `${itemName} ${cutStyle}`;
-  }
-  
-  let wixId = getProductId(resolvedName);
-  if (!wixId && cutStyle) {
-    let standardFish = itemName.toLowerCase();
-    if (standardFish === 'vanjaram') standardFish = 'seer fish';
-    wixId = getProductId(`${standardFish} ${cutStyle}`);
-  }
-  
-  if (!wixId) {
-    wixId = getProductId(itemName);
-  }
-  
-  return wixId;
-}
+// Native checkout implementation (Wix cart link functionality removed)
 
 // Start the conversational order flow
 async function startNativeOrderFlow(whatsappId, account, items) {
@@ -78,8 +54,8 @@ async function startNativeOrderFlow(whatsappId, account, items) {
     if (itemNeedingCutIndex !== -1) {
       await askForCut(whatsappId, account, orderItems[itemNeedingCutIndex], itemNeedingCutIndex);
     } else {
-      // No cuts needed, directly generate and send Wix Cart Link
-      await generateWixCartAndSend(whatsappId, account, orderItems);
+      // No cuts needed, summarize cart and ask for address
+      await sendCartSummaryAndAskAddress(whatsappId, account, stateContext);
     }
 
   } catch (err) {
@@ -110,55 +86,55 @@ async function askForCut(whatsappId, account, item, index) {
   await enqueueSend({ kind: 'interactive', accountId: account.id, to: String(whatsappId).replace(/\D/g, ''), localMessageId: localId, payload: { interactive: payload } });
 }
 
-async function generateWixCartAndSend(whatsappId, account, items) {
-  const wixItems = [];
+async function sendCartSummaryAndAskAddress(whatsappId, account, context) {
+  const items = context.items || [];
+  let total = 0;
+  let summaryText = '🛒 *Cart Summary*\n';
+  
   for (const item of items) {
-    const wixId = resolveWixProductId(item.name, item.selectedCut);
-    if (wixId) {
-      wixItems.push({ productId: wixId, quantity: item.qty });
-    }
+    const itemTotal = item.qty * item.pricePerKg;
+    total += itemTotal;
+    const cutStr = item.selectedCut ? ` (${item.selectedCut})` : '';
+    summaryText += `- ${item.qty}kg ${item.name}${cutStr} : ₹${itemTotal}\n`;
   }
+  
+  summaryText += `\n*Total: ₹${total}*\n\nPlease reply with your full delivery address to proceed.`;
+  
+  const localId = await insertPendingRow({ account, toNumber: whatsappId, messageType: 'text', messageBody: 'Cart Summary' });
+  await enqueueSend({ kind: 'text', accountId: account.id, to: String(whatsappId).replace(/\D/g, ''), localMessageId: localId, payload: { body: summaryText, previewUrl: false } });
+}
 
-  let wixCartUrl = null;
-  if (wixItems.length > 0) {
-    try {
-      const wixCartRes = await createWixCartLink({
-        phone: String(whatsappId).replace(/\D/g, ''),
-        items: wixItems
-      });
-      if (wixCartRes.ok) {
-        wixCartUrl = wixCartRes.cartUrl;
-      }
-    } catch (err) {
-      console.error('[nativeOrderEngine] Wix cart link generation failed:', err.message);
-    }
+async function generatePaymentLinkAndSend(whatsappId, account, context) {
+  const items = context.items || [];
+  let total = 0;
+  for (const item of items) {
+    total += item.qty * item.pricePerKg;
   }
-
-  if (wixCartUrl) {
+  
+  const orderId = `ORD_${Date.now()}`;
+  
+  const paymentResult = await createPaymentLink({
+    amount: total,
+    phone: String(whatsappId).replace(/\D/g, ''),
+    description: 'Meenzy Fresh Seafood Order',
+    referenceId: orderId
+  });
+  
+  if (paymentResult.ok) {
+    context.paymentLinkId = paymentResult.id;
     const client = await pool.connect();
     try {
-      await client.query('BEGIN');
-      await client.query(`
-        UPDATE coexistence.meenzy_carts 
-        SET current_state = 'COMPLETED', 
-            status = 'converted', 
-            updated_at = NOW()
-        WHERE whatsapp_id = $1 AND status = 'active'
-      `, [whatsappId]);
-      await client.query('COMMIT');
-    } catch (e) {
-      await client.query('ROLLBACK');
-      console.error('[nativeOrderEngine] DB update status error:', e.message);
+      await client.query(`UPDATE coexistence.meenzy_carts SET state_context = $1 WHERE whatsapp_id = $2 AND status = 'active'`, [JSON.stringify(context), whatsappId]);
     } finally {
       client.release();
     }
-
-    const msg = `🛒 *Your Meenzy Cart is Ready!*\n\nTap the link below to complete your checkout and payment on our website:\n🔗 ${wixCartUrl}\n\n_Your items have been added automatically!_`;
-    const localId = await insertPendingRow({ account, toNumber: whatsappId, messageType: 'text', messageBody: 'Wix Cart Link' });
+    
+    const msg = `🧾 *Payment Details*\nAmount to pay: ₹${total}\n\nPlease click the secure Razorpay link below to complete your payment:\n🔗 ${paymentResult.short_url}\n\n_Your order will be instantly confirmed once paid!_`;
+    const localId = await insertPendingRow({ account, toNumber: whatsappId, messageType: 'text', messageBody: 'Payment Link' });
     await enqueueSend({ kind: 'text', accountId: account.id, to: String(whatsappId).replace(/\D/g, ''), localMessageId: localId, payload: { body: msg, previewUrl: true } });
   } else {
-    const errorMsg = `❌ Sorry, we couldn't generate your cart link. Please try again or visit our website: https://www.meenzy.in`;
-    const localId = await insertPendingRow({ account, toNumber: whatsappId, messageType: 'text', messageBody: 'Wix Cart Error' });
+    const errorMsg = `❌ Sorry, we couldn't generate a payment link at the moment. Please try again later.`;
+    const localId = await insertPendingRow({ account, toNumber: whatsappId, messageType: 'text', messageBody: 'Payment Error' });
     await enqueueSend({ kind: 'text', accountId: account.id, to: String(whatsappId).replace(/\D/g, ''), localMessageId: localId, payload: { body: errorMsg, previewUrl: false } });
   }
 }
@@ -187,11 +163,11 @@ async function handleNativeInteraction(whatsappId, account, cart, incomingPayloa
             await client.query(`UPDATE coexistence.meenzy_carts SET state_context = $1 WHERE whatsapp_id = $2 AND status = 'active'`, [JSON.stringify(context), whatsappId]);
             await askForCut(whatsappId, account, items[nextItemNeedingCutIndex], nextItemNeedingCutIndex);
           } else {
-            // All cuts done! Generate and send Wix Cart Link
+            // All cuts done! Ask for address
             context.currentItemIndex = -1;
-            context.native_state = 'COMPLETED';
+            context.native_state = 'AWAITING_ADDRESS';
             await client.query(`UPDATE coexistence.meenzy_carts SET state_context = $1 WHERE whatsapp_id = $2 AND status = 'active'`, [JSON.stringify(context), whatsappId]);
-            await generateWixCartAndSend(whatsappId, account, items);
+            await sendCartSummaryAndAskAddress(whatsappId, account, context);
           }
         } finally {
           client.release();
@@ -200,6 +176,24 @@ async function handleNativeInteraction(whatsappId, account, cart, incomingPayloa
       }
     }
     return false;
+  } else if (cart.current_state === 'CART_REVIEW' && nativeState === 'AWAITING_ADDRESS') {
+    if (incomingText && incomingText.trim().length > 5) {
+      context.address = incomingText.trim();
+      context.native_state = 'AWAITING_PAYMENT';
+      const client = await pool.connect();
+      try {
+        await client.query(`UPDATE coexistence.meenzy_carts SET state_context = $1 WHERE whatsapp_id = $2 AND status = 'active'`, [JSON.stringify(context), whatsappId]);
+      } finally {
+        client.release();
+      }
+      
+      await generatePaymentLinkAndSend(whatsappId, account, context);
+      return true;
+    } else {
+      const localId = await insertPendingRow({ account, toNumber: whatsappId, messageType: 'text', messageBody: 'Invalid Address' });
+      await enqueueSend({ kind: 'text', accountId: account.id, to: String(whatsappId).replace(/\D/g, ''), localMessageId: localId, payload: { body: "Please provide a valid delivery address.", previewUrl: false } });
+      return true;
+    }
   }
 
   return false;
