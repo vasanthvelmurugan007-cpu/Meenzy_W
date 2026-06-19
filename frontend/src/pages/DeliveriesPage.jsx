@@ -424,7 +424,16 @@ export default function DeliveriesPage() {
             )}
 
             {/* Draw All Map Orders (Hide if heatmap is showing for cleaner UI) */}
-            {!showHeatmap && orders.filter(o => o.lat && o.lng && !isNaN(parseFloat(o.lat)) && !isNaN(parseFloat(o.lng))).map(order => {
+            {!showHeatmap && orders.map((order, idx) => {
+              let lat = parseFloat(order.lat);
+              let lng = parseFloat(order.lng);
+              if (isNaN(lat) || isNaN(lng)) {
+                // Default to Chennai center + slight spiral jitter so unmapped orders fan out and don't perfectly overlap
+                const angle = idx * 0.5;
+                const radius = 0.005 + (idx * 0.0005);
+                lat = 13.0827 + (radius * Math.cos(angle));
+                lng = 80.2707 + (radius * Math.sin(angle));
+              }
               const isUnassigned = ['CREATED','CONFIRMED','VERIFIED_READY','PACKED'].includes(order.status) && !order.assigned_agent_id;
               const isDelivered = order.status === 'DELIVERED';
               const isAssigned = !!order.assigned_agent_id && !isDelivered && order.status !== 'CANCELLED' && order.status !== 'DELIVERY_FAILED_DISPUTED';
@@ -437,7 +446,7 @@ export default function DeliveriesPage() {
               else if (isIssue) bgColor = '#f59e0b'; // Yellow
               
               return (
-              <Marker key={order.id} longitude={parseFloat(order.lng)} latitude={parseFloat(order.lat)} anchor="bottom" onClick={e => { e.originalEvent.stopPropagation(); setSelectedOrder(order); }}>
+              <Marker key={order.id} longitude={lng} latitude={lat} anchor="bottom" onClick={e => { e.originalEvent.stopPropagation(); setSelectedOrder(order); }}>
                 <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', opacity: isDelivered ? 0.7 : 1 }}>
                   {isUnassigned && (
                     <div style={{ 
