@@ -389,9 +389,25 @@ async function cancelOrder(orderId) {
 router.get('/meenzy/preorders', async (req, res) => {
   try {
     const preorders = await pool.query(
-      `SELECT * FROM coexistence.meenzy_preorders ORDER BY created_at DESC`
+      `SELECT p.*,
+              COALESCE(
+                (SELECT o.payment_status
+                 FROM coexistence.ecosystem_orders o
+                 JOIN coexistence.ecosystem_order_items i ON o.id = i.order_id
+                 WHERE RIGHT(regexp_replace(o.user_phone, '\\D', '', 'g'), 10) = RIGHT(regexp_replace(p.customer_phone, '\\D', '', 'g'), 10)
+                   AND i.product_name ILIKE '%' || p.ordered_item || '%'
+                 ORDER BY o.created_at DESC LIMIT 1
+                ),
+                p.payment_status
+              ) as true_payment_status
+       FROM coexistence.meenzy_preorders p 
+       ORDER BY p.created_at DESC`
     );
-    res.json(preorders.rows);
+    const rows = preorders.rows.map(r => ({
+      ...r,
+      payment_status: r.true_payment_status || r.payment_status
+    }));
+    res.json(rows);
   } catch (err) {
     console.error('[meenzy-get-preorders] Error:', err.message);
     res.status(500).json({ error: 'Internal server error' });
