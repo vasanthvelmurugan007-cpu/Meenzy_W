@@ -195,15 +195,15 @@ export default function AgentPortalPage() {
     isDriveModeRef.current = isDriveMode;
     // Instantly snap to agent when Drive Mode is turned ON
     if (isDriveMode && agentLocation) {
-      setViewState(prev => ({
-        ...prev,
-        longitude: agentLocation.lng,
-        latitude: agentLocation.lat,
-        zoom: 18,
-        pitch: 60,
-        bearing: lastBearing,
-        transitionDuration: 1000
-      }));
+      if (mapRef.current) {
+        mapRef.current.flyTo({
+          center: [agentLocation.lng, agentLocation.lat],
+          zoom: 18,
+          pitch: 60,
+          bearing: lastBearing,
+          duration: 1000
+        });
+      }
     }
   }, [isDriveMode, agentLocation, lastBearing]);
 
@@ -252,10 +252,16 @@ export default function AgentPortalPage() {
       const data = await api.agentPortal.getStats(selectedAgent.id, agentToken);
       if (data.ok) {
         setAgentStats(data.stats);
+        localStorage.setItem(`agentStatsCache_${selectedAgent.id}`, JSON.stringify(data.stats));
       }
     } catch (err) {
       console.error('Failed to load stats', err);
-      if (err.message && err.message.includes('401')) handleLogout();
+      const cached = localStorage.getItem(`agentStatsCache_${selectedAgent.id}`);
+      if (cached) {
+        setAgentStats(JSON.parse(cached));
+      } else if (err.message && err.message.includes('401')) {
+        handleLogout();
+      }
     }
   }
 
@@ -276,9 +282,15 @@ export default function AgentPortalPage() {
         });
       }
       setOrders(newOrders);
+      localStorage.setItem(`agentOrdersCache_${selectedAgent.id}`, JSON.stringify(newOrders));
     } catch (err) {
-      if (err.message.includes('Unauthorized') || err.message.includes('401')) handleLogout();
-      else if (!silent) setError('Failed to load your orders.');
+      const cached = localStorage.getItem(`agentOrdersCache_${selectedAgent?.id}`);
+      if (cached) {
+        setOrders(JSON.parse(cached));
+      } else {
+        if (err.message.includes('Unauthorized') || err.message.includes('401')) handleLogout();
+        else if (!silent) setError('Failed to load your orders.');
+      }
     } finally {
       if (!silent) setLoading(false);
     }
@@ -309,15 +321,15 @@ export default function AgentPortalPage() {
           }
           
           if (isDriveModeRef.current) {
-            setViewState(prev => ({ 
-              ...prev, 
-              longitude: coords.lng, 
-              latitude: coords.lat, 
-              zoom: 18, 
-              pitch: 60, 
-              bearing,
-              transitionDuration: 1000 // Smooth continuous tracking
-            }));
+            if (mapRef.current) {
+              mapRef.current.easeTo({
+                center: [coords.lng, coords.lat],
+                zoom: 18,
+                pitch: 60,
+                bearing,
+                duration: 1000
+              });
+            }
           }
           
           return coords;
@@ -381,14 +393,18 @@ export default function AgentPortalPage() {
               if (!initialFitDone.current) {
                 mapRef.current.fitBounds(
                   [[minLng, minLat], [maxLng, maxLat]],
-                  { padding: 40, duration: 1000 }
+                  { padding: 40, duration: 1000, maxZoom: 15 }
                 );
                 initialFitDone.current = true;
               }
             } else if (!agentLocation && stops.length > 0) {
               const firstStop = stops[0].split(',');
               if (!initialFitDone.current) {
-                setViewState(prev => ({ ...prev, longitude: parseFloat(firstStop[0]), latitude: parseFloat(firstStop[1]) }));
+                if (mapRef.current) {
+                  mapRef.current.flyTo({ center: [parseFloat(firstStop[0]), parseFloat(firstStop[1])], zoom: 14 });
+                } else {
+                  setViewState(prev => ({ ...prev, longitude: parseFloat(firstStop[0]), latitude: parseFloat(firstStop[1]) }));
+                }
                 initialFitDone.current = true;
               }
             }
@@ -685,8 +701,7 @@ export default function AgentPortalPage() {
           </button>
           <Map
             ref={mapRef}
-            {...viewState}
-            onMove={evt => setViewState(evt.viewState)}
+            initialViewState={viewState}
             mapStyle={`mapbox://styles/mapbox/streets-v12`}
             mapboxAccessToken={import.meta.env.VITE_MAPBOX_TOKEN}
           >
