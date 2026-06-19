@@ -2001,7 +2001,7 @@ router.post('/webhook/wix-order', async (req, res) => {
     const otp = Math.floor(1000 + Math.random() * 9000).toString();
     const paymentStatusRaw = order.paymentStatus || 'UNKNOWN';
     const paymentMethod = order.billingInfo?.paymentMethod || '';
-    const finalPaymentStatus = (paymentStatusRaw === 'PAID' || paymentStatusRaw === 'FULLY_PAID') ? 'ONLINE' : (paymentMethod.toLowerCase().includes('offline') || paymentMethod.toLowerCase().includes('cash')) ? 'COD' : 'UNKNOWN';
+    const finalPaymentStatus = (paymentStatusRaw === 'PAID' || paymentStatusRaw === 'FULLY_PAID') ? 'PAID' : 'COD';
 
     let savedOrder;
     try {
