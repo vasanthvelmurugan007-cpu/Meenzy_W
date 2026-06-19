@@ -40,13 +40,27 @@ router.get('/meenzy/dashboard/stats', async (req, res) => {
       LIMIT 5
     `);
     
-    const { rows: recentOrders } = await pool.query(`
-      SELECT p.id, p.customer_phone, p.ordered_item, p.quantity, p.order_status, p.payment_status, p.created_at, a.name as driver_name
-      FROM coexistence.meenzy_preorders p
-      LEFT JOIN coexistence.meenzy_delivery_agents a ON p.driver_id = a.id
-      ORDER BY p.created_at DESC
-      LIMIT 10
-    `);
+    let recentOrders = [];
+    try {
+      const { rows } = await pool.query(`
+        SELECT p.id, p.customer_phone, p.ordered_item, p.quantity, p.order_status, p.payment_status, p.created_at, a.name as driver_name
+        FROM coexistence.meenzy_preorders p
+        LEFT JOIN coexistence.meenzy_delivery_agents a ON p.driver_id = a.id
+        ORDER BY p.created_at DESC
+        LIMIT 10
+      `);
+      recentOrders = rows;
+    } catch (colErr) {
+      console.warn('payment_status column might be missing, falling back to original query');
+      const { rows } = await pool.query(`
+        SELECT p.id, p.customer_phone, p.ordered_item, p.quantity, p.order_status, p.created_at, a.name as driver_name
+        FROM coexistence.meenzy_preorders p
+        LEFT JOIN coexistence.meenzy_delivery_agents a ON p.driver_id = a.id
+        ORDER BY p.created_at DESC
+        LIMIT 10
+      `);
+      recentOrders = rows;
+    }
 
     const { rows: pincodeStats } = await pool.query(`
       SELECT 
