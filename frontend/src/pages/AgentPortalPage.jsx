@@ -873,19 +873,25 @@ export default function AgentPortalPage() {
 
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <CreditCard size={20} color={order.payment_status === 'COLLECTED' ? '#10b981' : '#f59e0b'} />
+                    <CreditCard size={20} color={order.payment_status === 'PAID' ? '#10b981' : (order.payment_status === 'COLLECTED' ? '#10b981' : '#f59e0b')} />
                     <span style={{ fontWeight: 700, color: theme.text }}>Payment</span>
                   </div>
-                  <button 
-                    onClick={() => handlePaymentToggle(order.id, order.payment_status)}
-                    style={{ 
-                      padding: '6px 12px', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer', border: 'none',
-                      background: order.payment_status === 'COLLECTED' ? '#10b981' : (isDarkMode ? '#3f2a14' : '#fef3c7'),
-                      color: order.payment_status === 'COLLECTED' ? '#fff' : (isDarkMode ? '#fcd34d' : '#92400e'),
-                    }}
-                  >
-                    {order.payment_status === 'COLLECTED' ? '✓ COLLECTED' : 'MARK COLLECTED'}
-                  </button>
+                  {order.payment_status === 'PAID' ? (
+                    <div style={{ padding: '6px 12px', borderRadius: 6, fontSize: 12, fontWeight: 700, background: '#dcfce7', color: '#166534', border: '1px solid #bbf7d0' }}>
+                      ✓ PAID ONLINE
+                    </div>
+                  ) : (
+                    <button 
+                      onClick={() => handlePaymentToggle(order.id, order.payment_status)}
+                      style={{ 
+                        padding: '6px 12px', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer', border: 'none',
+                        background: order.payment_status === 'COLLECTED' ? '#10b981' : (isDarkMode ? '#3f2a14' : '#fef3c7'),
+                        color: order.payment_status === 'COLLECTED' ? '#fff' : (isDarkMode ? '#fcd34d' : '#92400e'),
+                      }}
+                    >
+                      {order.payment_status === 'COLLECTED' ? '✓ COLLECT CASH' : 'MARK COLLECTED'}
+                    </button>
+                  )}
                 </div>
                 
                 {/* POD Image Upload */}

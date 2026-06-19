@@ -700,6 +700,7 @@ export default function DeliveriesPage() {
                         <th style={{ padding: '12px 20px', fontWeight: 600 }}>Customer</th>
                         <th style={{ padding: '12px 20px', fontWeight: 600 }}>Items</th>
                         <th style={{ padding: '12px 20px', fontWeight: 600 }}>Value</th>
+                        <th style={{ padding: '12px 20px', fontWeight: 600 }}>Payment</th>
                         <th style={{ padding: '12px 20px', fontWeight: 600 }}>Date</th>
                       </tr>
                     </thead>
@@ -778,6 +779,15 @@ export default function DeliveriesPage() {
                             {Array.isArray(order.items) && order.items.length > 0 ? order.items.map(i => `${i.product_name} (${i.quantity}kg)`).join(', ') : '-'}
                           </td>
                           <td style={{ padding: '12px 20px', fontWeight: 600 }}>₹{order.total_price}</td>
+                          <td style={{ padding: '12px 20px' }}>
+                            <span style={{
+                              padding: '4px 8px', borderRadius: 4, fontSize: 11, fontWeight: 700,
+                              background: order.payment_status === 'PAID' ? '#dcfce7' : '#fee2e2',
+                              color: order.payment_status === 'PAID' ? '#16a34a' : '#ef4444'
+                            }}>
+                              {order.payment_status === 'PAID' ? 'ONLINE' : 'COD'}
+                            </span>
+                          </td>
                           <td style={{ padding: '12px 20px', color: C.textMuted }}>{new Date(order.created_at).toLocaleString()}</td>
                         </tr>
                       ))}
