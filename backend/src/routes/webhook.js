@@ -326,124 +326,6 @@ Customer Message: "${messageText}"`;
 }
 
 // Robust TSV Parser to handle multi-line quotes and TSV structure
-function parseTSV(text) {
-  const result = [];
-  let row = [];
-  let field = '';
-  let inQuotes = false;
-  
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i];
-    const next = text[i+1];
-    
-    if (inQuotes) {
-      if (char === '"') {
-        if (next === '"') {
-          field += '"';
-          i++;
-        } else {
-          inQuotes = false;
-        }
-      } else {
-        field += char;
-      }
-    } else {
-      if (char === '"') {
-        inQuotes = true;
-      } else if (char === '\t') {
-        row.push(field);
-        field = '';
-      } else if (char === '\n' || char === '\r') {
-        if (char === '\r' && next === '\n') {
-          i++;
-        }
-        row.push(field);
-        result.push(row);
-        row = [];
-        field = '';
-      } else {
-        field += char;
-      }
-    }
-  }
-  if (field || row.length > 0) {
-    row.push(field);
-    result.push(row);
-  }
-  return result;
-}
-
-// === DYNAMIC WIX TSV CATALOG FETCHER ===
-async function fetchCatalogProducts() {
-  try {
-    const feedUrl = process.env.WIX_FEED_URL;
-    if (!feedUrl) {
-      console.error("[meenzy-wix-fetch] WIX_FEED_URL missing in env!");
-      return [];
-    }
-    
-    console.log(`[meenzy-wix-fetch] Sourcing products from Wix Facebook TSV feed...`);
-    const res = await fetch(feedUrl);
-    const text = await res.text();
-    const rows = parseTSV(text);
-    if (rows.length < 2) {
-      console.error("[meenzy-wix-fetch] TSV feed is empty or invalid format.");
-      return [];
-    }
-    
-    const headers = rows[0];
-    const items = [];
-    for (let i = 1; i < rows.length; i++) {
-      const row = rows[i];
-      if (!row || row.length < headers.length) continue;
-      const item = {};
-      headers.forEach((h, idx) => {
-        item[h] = row[idx];
-      });
-      if (item.id && item.title && item.availability === 'in stock') {
-        items.push(item);
-      }
-    }
-    
-    console.log(`[meenzy-wix-fetch] Successfully parsed ${items.length} variants from TSV Feed`);
-    
-    // Group by item_group_id (Wix Product ID) or title to get unique products
-    // Selecting the first variant of each product as representative
-    const productMap = new Map();
-    for (const item of items) {
-      const key = item.item_group_id && item.item_group_id !== "undefined" ? item.item_group_id : item.title.trim();
-      
-      if (!productMap.has(key)) {
-        productMap.set(key, item);
-      } else {
-        // Prefer variants with Weight "1 Kg" or "1kg" or first option if possible
-        const current = productMap.get(key);
-        const has1Kg = item.title.toLowerCase().includes("1 kg") || item.size?.toLowerCase().includes("1 kg");
-        const currentHas1Kg = current.title.toLowerCase().includes("1 kg") || current.size?.toLowerCase().includes("1 kg");
-        if (has1Kg && !currentHas1Kg) {
-          productMap.set(key, item);
-        }
-      }
-    }
-    
-    const uniqueProducts = Array.from(productMap.values()).map(item => ({
-      id: item.id,
-      productId: item.item_group_id,
-      name: item.title || "",
-      description: item.description || "",
-      price: String(item.price || "0").replace(/[^0-9.]/g, ''), // Strip "INR" or "₹" if any
-      retailer_id: item.id, // Wix TSV Feed item ID is the exact synced retailer ID in Meta!
-      image_url: item.image_link || item.image_url || ''
-    }));
-    
-    console.log(`[meenzy-wix-fetch] Resolved ${uniqueProducts.length} unique products from TSV Feed`);
-    return uniqueProducts;
-  } catch (e) {
-    console.error("[meenzy-wix-fetch] Wix TSV Fetch Error:", e);
-    return [];
-  }
-}
-
 const { createClient, OAuthStrategy } = require('@wix/sdk');
 const { checkout } = require('@wix/ecom');
 const { redirects } = require('@wix/redirects');
@@ -1320,6 +1202,8 @@ router.post('/webhook/whatsapp', async (req, res) => {
           const { getOrCreateCart } = require('../engine/cartManager');
           const cart = await getOrCreateCart(r.contact_number);
           const { resolveAccount } = require('../services/messageSender');
+const { fetchCatalogProducts } = require('../services/wixCatalogFetcher');
+
           const { account } = await resolveAccount({});
           if (account) {
             const nativeHandled = await handleNativeInteraction(r.contact_number, account, cart, null, trimmedBody);

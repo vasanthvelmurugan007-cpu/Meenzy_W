@@ -3,6 +3,8 @@ const { insertPendingRow } = require('../services/messageSender');
 const { enqueueSend } = require('../queue/sendQueue');
 const { getPriceForExtractedItem, getCutOptionsForExtractedItem } = require('../catalogParser');
 const { createPaymentLink } = require('../services/razorpayService');
+const { getProductImageByName } = require('../services/wixCatalogFetcher');
+
 // Native checkout implementation (Wix cart link functionality removed)
 
 // Start the conversational order flow
@@ -76,11 +78,20 @@ async function askForCut(whatsappId, account, item, index) {
     }
   }));
 
+  const imageUrl = await getProductImageByName(item.name);
+
   const payload = {
     type: "button",
     body: { text },
     action: { buttons }
   };
+  
+  if (imageUrl) {
+    payload.header = {
+      type: "image",
+      image: { link: imageUrl }
+    };
+  }
 
   const localId = await insertPendingRow({ account, toNumber: whatsappId, messageType: 'interactive', messageBody: 'Select Cut' });
   await enqueueSend({ kind: 'interactive', accountId: account.id, to: String(whatsappId).replace(/\D/g, ''), localMessageId: localId, payload: { interactive: payload } });
