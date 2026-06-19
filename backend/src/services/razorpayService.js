@@ -35,6 +35,8 @@ async function createPaymentLink({ amount, phone, description, referenceId }) {
     accept_partial: false,
     description: description || 'Meenzy Order Payment',
     customer: {
+      name: 'Meenzy Customer',
+      email: 'customer@meenzy.in',
       contact: `+${phone}`
     },
     notify: {

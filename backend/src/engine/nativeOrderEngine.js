@@ -233,7 +233,7 @@ async function generatePaymentLinkAndSend(whatsappId, account, context) {
     const localId = await insertPendingRow({ account, toNumber: whatsappId, messageType: 'text', messageBody: 'Payment Link' });
     await enqueueSend({ kind: 'text', accountId: account.id, to: String(whatsappId).replace(/\D/g, ''), localMessageId: localId, payload: { body: msg, previewUrl: true } });
   } else {
-    const errorMsg = `❌ Sorry, we couldn't generate a payment link at the moment. Please try again later.`;
+    const errorMsg = `❌ Sorry, we couldn't generate a payment link at the moment.\n\nError: ${paymentResult.error}\n\nPlease try again later.`;
     const localId = await insertPendingRow({ account, toNumber: whatsappId, messageType: 'text', messageBody: 'Payment Error' });
     await enqueueSend({ kind: 'text', accountId: account.id, to: String(whatsappId).replace(/\D/g, ''), localMessageId: localId, payload: { body: errorMsg, previewUrl: false } });
   }
