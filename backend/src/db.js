@@ -42,4 +42,10 @@ pool.query(`
   console.log('[DB] Note: Could not add payment_status column (might already exist or permission error).', err.message);
 });
 
+pool.query(`
+  ALTER TYPE coexistence.user_state ADD VALUE IF NOT EXISTS 'COMPLETED'
+`).catch(err => {
+  console.log('[DB] Note: Could not add COMPLETED to user_state.', err.message);
+});
+
 module.exports = pool;
