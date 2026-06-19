@@ -86,7 +86,7 @@ router.post('/', async (req, res) => {
             await client.query('SAVEPOINT check_eco');
             await client.query(`
               INSERT INTO coexistence.ecosystem_orders 
-              (user_phone, total_amount, status, payment_status, source, address_line, order_items)
+              (user_phone, total_price, status, payment_status, source, address_line, order_items)
               VALUES ($1, $2, 'CONFIRMED', 'PAID', 'WHATSAPP_NATIVE', $3, $4::jsonb)
             `, [customerPhone, totalAmount, address, orderItemsJson]);
             await client.query('RELEASE SAVEPOINT check_eco');
@@ -95,7 +95,7 @@ router.post('/', async (req, res) => {
             if (ecoErr.code === '42703') { // undefined_column
               await client.query(`
                 INSERT INTO coexistence.ecosystem_orders 
-                (user_phone, total_amount, status, source, address_line, order_items)
+                (user_phone, total_price, status, source, address_line, order_items)
                 VALUES ($1, $2, 'CONFIRMED', 'WHATSAPP_NATIVE', $3, $4::jsonb)
               `, [customerPhone, totalAmount, address, orderItemsJson]);
             } else {
