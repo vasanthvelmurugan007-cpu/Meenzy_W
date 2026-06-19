@@ -58,6 +58,22 @@ function loadCatalog() {
           rawName = rawName.substring(0, dashIndex);
         }
         currentProductName = rawName.trim();
+        
+        let cuts = [];
+        const cutIdx = parts.indexOf('Cutting style:');
+        if (cutIdx > -1 && parts.length > cutIdx + 2) {
+           cuts = parts[cutIdx + 2].split(';').map(s => s.trim()).filter(Boolean);
+        }
+        
+        if (!catalogMap[currentProductName]) {
+            catalogMap[currentProductName] = {
+                name: currentProductName,
+                pricePerKg: 0,
+                cutOptions: cuts
+            };
+        } else {
+            catalogMap[currentProductName].cutOptions = cuts;
+        }
       } else if (type === 'VARIANT' && handle === currentHandle) {
         const price = parseFloat(parts[11]);
         if (!isNaN(price)) {
@@ -70,19 +86,11 @@ function loadCatalog() {
             multiplier = 1;
           }
           
-          const pricePerKg = price * multiplier;
+        const pricePerKg = price * multiplier;
           
-          if (!catalogMap[currentProductName]) {
-             catalogMap[currentProductName] = {
-               name: currentProductName,
-               pricePerKg: pricePerKg
-             };
-          } else {
-             // Just keep the cheapest or first variant as base price
-             if (pricePerKg < catalogMap[currentProductName].pricePerKg) {
-                catalogMap[currentProductName].pricePerKg = pricePerKg;
-             }
-          }
+        if (catalogMap[currentProductName].pricePerKg === 0 || pricePerKg < catalogMap[currentProductName].pricePerKg) {
+            catalogMap[currentProductName].pricePerKg = pricePerKg;
+        }
         }
       }
     }
@@ -110,7 +118,23 @@ function getPriceForExtractedItem(itemName) {
   return 0; // Unknown
 }
 
+function getCutOptionsForExtractedItem(itemName) {
+  const catalog = loadCatalog();
+  if (!catalog) return [];
+  
+  const query = itemName.toLowerCase();
+  
+  for (const key of Object.keys(catalog)) {
+    const baseNames = key.toLowerCase().split('/').map(s => s.trim());
+    if (baseNames.some(n => query.includes(n) || n.includes(query))) {
+      return catalog[key].cutOptions || [];
+    }
+  }
+  return [];
+}
+
 module.exports = {
   loadCatalog,
-  getPriceForExtractedItem
+  getPriceForExtractedItem,
+  getCutOptionsForExtractedItem
 };

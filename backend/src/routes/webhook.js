@@ -6,7 +6,8 @@ const { evaluateTriggers, resumeAutomation } = require('../engine/automationEngi
 const { markPending, MEDIA_TYPES } = require('../services/mediaDownloader');
 const { enqueueMediaDownload } = require('../queue/mediaQueue');
 const catalogProducts = require('../catalogData');
-const { handleCartState, handleFreeformText } = require('../engine/cartManager');
+const { handleCartState, handleFreeformText, getOrCreateCart } = require('../engine/cartManager');
+const { handleNativeInteraction } = require('../engine/nativeOrderEngine');
 
 // Removed Google Generative AI in favor of direct OpenRouter fetch
 
@@ -1280,6 +1281,10 @@ router.post('/webhook/whatsapp', async (req, res) => {
             }
             // ── End Swap Fish Handler ─────────────────────────────────────────────
 
+            const cart = await getOrCreateCart(r.contact_number);
+            const nativeHandled = await handleNativeInteraction(r.contact_number, account, cart, btnId, null);
+            if (nativeHandled) { r.__handled = true; continue; }
+
             const handled = await handleCartState(r.contact_number, account, btnId);
             if (handled) continue;
           }
@@ -1366,6 +1371,19 @@ router.post('/webhook/whatsapp', async (req, res) => {
         // MEENZY Custom Workflow Rule 5: LLM Triage and Swap parser
         if (r.direction === 'incoming' && r.message_body && !r.__handled) {
           const trimmedBody = r.message_body.trim();
+          
+          // Check for native interaction (e.g. Address input)
+          const { getOrCreateCart } = require('../engine/cartManager');
+          const cart = await getOrCreateCart(r.contact_number);
+          const { resolveAccount } = require('../services/messageSender');
+          const { account } = await resolveAccount({});
+          if (account) {
+            const nativeHandled = await handleNativeInteraction(r.contact_number, account, cart, null, trimmedBody);
+            if (nativeHandled) {
+              r.__handled = true;
+              continue; // proceed to next record
+            }
+          }
           
           // Temporary Pincode Capture
           if (/^\d{6}$/.test(trimmedBody)) {
@@ -1555,85 +1573,23 @@ router.post('/webhook/whatsapp', async (req, res) => {
                } else if (intent === 'PLACING_ORDER') {
                   const llmResponse = await extractOrderLLM(trimmedBody, prefs);
                   const items = llmResponse.items || [];
-                  const dynamicReply = llmResponse.reply || `🤖 *AI Order Assistant*\n\nI've extracted the following items from your message:`;
-                  
                   const { resolveAccount, insertPendingRow } = require('../services/messageSender');
                   const { enqueueSend } = require('../queue/sendQueue');
                   const { account, error } = await resolveAccount({});
-                  
+
                   if (!error && account) {
                     if (items && items.length > 0) {
-                      let confMsg = `${dynamicReply}\n\n`;
-                      
-                      const { getPriceForExtractedItem } = require('../catalogParser');
-                      const cartPayload = [];
-                      let totalAmount = 0;
-                      let hasPrices = false;
-                      const orderId = 'ORD-' + Math.floor(100000 + Math.random() * 900000);
-                      
-                      confMsg += `Thank you for your order! 🌊 (Order #${orderId})\n\nBecause we source our seafood fresh daily, your order is currently marked as a Preorder.\n\nRequested Items:\n`;
-                      
-                      // WhatsApp AI orders go to meenzy_preorders only (not ecosystem_orders — only website orders go there)
-                      for (const order of items) {
-                        const qty = parseFloat(order.qty) || 1;
-                        await client.query(
-                          `INSERT INTO coexistence.meenzy_preorders (customer_phone, ordered_item, quantity, order_status) VALUES ($1, $2, $3, $4)`,
-                          [r.contact_number, order.item, qty, 'CONFIRMED']
-                        );
-                        // Also mirror to temporary carts for abandonment tracking
-                        await updateTemporaryCart(client, r.contact_number, order.item, qty, 'ai_intake_complete');
-                        
-                        const pricePerKg = getPriceForExtractedItem(order.item);
-                        let itemPriceStr = '';
-                        let itemTotal = 0;
-                        if (pricePerKg > 0) {
-                          itemTotal = pricePerKg * qty;
-                          totalAmount += itemTotal;
-                          itemPriceStr = ` - ₹${itemTotal.toFixed(2)}`;
-                          hasPrices = true;
-                        }
-                        
-                        confMsg += `* ${order.item} - ${qty} Kg${itemPriceStr}\n`;
-                        cartPayload.push({ item: order.item, qty });
-                      }
-                      
-                      if (hasPrices) {
-                        confMsg += `\n💵 Total: ₹${totalAmount.toFixed(2)}\n`;
-                      }
-                      
-                      confMsg += `\nYour order has been registered. We will check for the availability and then we will send you the confirmation message soon!`;
-                      
-                      const crossSell = await generateCrossSellLLM(cartPayload);
-                      if (crossSell) {
-                        confMsg += `\n\n${crossSell.message}`;
-                      }
-
-                      const localId = await insertPendingRow({ account, toNumber: r.contact_number, messageType: 'text', messageBody: confMsg });
-                      await enqueueSend({ kind: 'text', accountId: account.id, to: String(r.contact_number).replace(/\D/g, ''), localMessageId: localId, payload: { body: confMsg, previewUrl: true } });
-
-                      // --- Send Wix Payment Link ---
+                      // Delegate to Native Order Flow to ask for Cuts / Address
                       try {
-                        const { createWixCartLink } = require('../services/wixCartService');
-                        const { mapOrderToWixItems } = require('../services/wixProductMap');
-                        const orderItemsForWix = items.map(o => ({ name: o.item, quantity: parseFloat(o.qty) || 1 }));
-                        const wixItems = mapOrderToWixItems(orderItemsForWix);
-                        if (wixItems.length > 0) {
-                          const { cartUrl } = await createWixCartLink({
-                            phone: String(r.contact_number).replace(/\D/g, ''),
-                            items: wixItems
-                          });
-                          const paymentMsg = `💳 *Complete Your Payment Online*\n\nTap the link below to pay securely on our website:\n${cartUrl}\n\n_Your items will be automatically added to the cart. Just click Checkout!_\n\n⏱️ _Link expires in 24 hours._`;
-                          const payLocalId = await insertPendingRow({ account, toNumber: r.contact_number, messageType: 'text', messageBody: 'Wix payment link sent' });
-                          await enqueueSend({ kind: 'text', accountId: account.id, to: String(r.contact_number).replace(/\D/g, ''), localMessageId: payLocalId, payload: { body: paymentMsg, previewUrl: true } });
-                          console.log(`[PLACING_ORDER] Wix payment link sent to ${r.contact_number}: ${cartUrl}`);
-                        } else {
-                          console.warn(`[PLACING_ORDER] No Wix product IDs matched for:`, orderItemsForWix.map(i => i.name));
-                        }
-                      } catch (wixErr) {
-                        console.error('[PLACING_ORDER] Wix cart link error (non-fatal):', wixErr.message);
+                        const { startNativeOrderFlow } = require('../engine/nativeOrderEngine');
+                        await startNativeOrderFlow(r.contact_number, account, items);
+                        console.log(`[PLACING_ORDER] Started native order flow for ${r.contact_number}`);
+                      } catch (err) {
+                        console.error('[PLACING_ORDER] Error starting native flow:', err);
+                        const fallbackMsg = "Oops! We encountered an issue processing your order. Please type 'Hi' to start over.";
+                        const localId = await insertPendingRow({ account, toNumber: r.contact_number, messageType: 'text', messageBody: fallbackMsg });
+                        await enqueueSend({ kind: 'text', accountId: account.id, to: String(r.contact_number).replace(/\D/g, ''), localMessageId: localId, payload: { body: fallbackMsg, previewUrl: false } });
                       }
-
-                      
                     } else {
                       // Fallback if LLM couldn't extract items
                       const listPayload = {

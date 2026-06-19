@@ -13,6 +13,7 @@ const { router: categoriesRouter } = require('./routes/categories');
 const { router: contactFieldsRouter } = require('./routes/contactFields');
 const { router: usersRouter } = require('./routes/users');
 const { router: meenzyRouter } = require('./routes/meenzy');
+const razorpayWebhookRouter = require('./routes/razorpayWebhook');
 const { router: uploadsRouter, UPLOAD_DIR } = require('./routes/uploads');
 const { router: templatesRouter, syncAllAccountTemplates } = require('./routes/templates');
 const { router: broadcastsRouter } = require('./routes/broadcasts');
@@ -119,8 +120,9 @@ app.use(apiLimiter);
 // Health check
 app.get('/health', (req, res) => res.json({ ok: true }));
 
-// Public routes (webhook from n8n — no auth)
+// Public routes (webhook from n8n / Razorpay — no auth)
 app.use('/api', webhookRouter);
+app.use('/api/webhook/razorpay', razorpayWebhookRouter);
 app.use('/api', meenzyRouter);
 app.use('/api', require('./routes/meenzyDashboard'));
 app.use('/api', require('./routes/campaigns'));
