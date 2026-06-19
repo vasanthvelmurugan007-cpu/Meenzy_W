@@ -18,13 +18,13 @@ async function startNativeOrderFlow(whatsappId, account, items) {
     return;
   }
   
-  // Create state context
-  const stateContext = {
+    const stateContext = {
     searchQuery: requestedItem,
     matches: matches,
     selectedProduct: null,
     selectedCut: null,
-    selectedQty: null
+    selectedQty: null,
+    native_state: 'AWAITING_PRODUCT'
   };
 
   const client = await pool.connect();
@@ -32,10 +32,10 @@ async function startNativeOrderFlow(whatsappId, account, items) {
     await client.query('BEGIN');
     await client.query(`
       INSERT INTO coexistence.meenzy_carts (whatsapp_id, current_state, state_context, status, cart_items, updated_at)
-      VALUES ($1, 'AWAITING_PRODUCT', $2, 'active', '[]'::jsonb, now())
+      VALUES ($1, 'CART_REVIEW', $2, 'active', '[]'::jsonb, now())
       ON CONFLICT (whatsapp_id) 
       DO UPDATE SET 
-        current_state = 'AWAITING_PRODUCT', 
+        current_state = 'CART_REVIEW', 
         state_context = $2,
         status = 'active',
         cart_items = '[]'::jsonb,
@@ -86,12 +86,13 @@ async function handleProductSelection(whatsappId, account, matchIndex) {
     
     context.selectedProduct = selectedProduct;
     
-    // Check if it has cuts
     if (selectedProduct.cutOptions && selectedProduct.cutOptions.length > 0) {
-      await client.query(`UPDATE coexistence.meenzy_carts SET current_state = 'AWAITING_VARIANTS', state_context = $1, updated_at = now() WHERE whatsapp_id = $2`, [JSON.stringify(context), whatsappId]);
+      context.native_state = 'AWAITING_VARIANTS';
+      await client.query(`UPDATE coexistence.meenzy_carts SET current_state = 'CART_REVIEW', state_context = $1, updated_at = now() WHERE whatsapp_id = $2`, [JSON.stringify(context), whatsappId]);
       await askForCut(whatsappId, account, selectedProduct);
     } else {
-      await client.query(`UPDATE coexistence.meenzy_carts SET current_state = 'AWAITING_QUANTITY', state_context = $1, updated_at = now() WHERE whatsapp_id = $2`, [JSON.stringify(context), whatsappId]);
+      context.native_state = 'AWAITING_QUANTITY';
+      await client.query(`UPDATE coexistence.meenzy_carts SET current_state = 'CART_REVIEW', state_context = $1, updated_at = now() WHERE whatsapp_id = $2`, [JSON.stringify(context), whatsappId]);
       await askForQuantity(whatsappId, account, selectedProduct);
     }
   } finally {
@@ -127,8 +128,9 @@ async function handleCutSelection(whatsappId, account, cutIndex) {
     if (!selectedProduct) return;
     
     context.selectedCut = selectedProduct.cutOptions[cutIndex];
+    context.native_state = 'AWAITING_QUANTITY';
     
-    await client.query(`UPDATE coexistence.meenzy_carts SET current_state = 'AWAITING_QUANTITY', state_context = $1, updated_at = now() WHERE whatsapp_id = $2`, [JSON.stringify(context), whatsappId]);
+    await client.query(`UPDATE coexistence.meenzy_carts SET current_state = 'CART_REVIEW', state_context = $1, updated_at = now() WHERE whatsapp_id = $2`, [JSON.stringify(context), whatsappId]);
     await askForQuantity(whatsappId, account, selectedProduct);
   } finally {
     client.release();
@@ -166,6 +168,7 @@ async function handleQuantitySelection(whatsappId, account, qty) {
       selectedCut: context.selectedCut
     };
     context.items = [cartItem];
+    context.native_state = 'CART_REVIEW'; // Just waiting for address now
 
     await client.query(`UPDATE coexistence.meenzy_carts SET current_state = 'CART_REVIEW', state_context = $1, updated_at = now() WHERE whatsapp_id = $2`, [JSON.stringify(context), whatsappId]);
     await sendCartSummaryAndAskAddress(whatsappId, account, context);
@@ -334,31 +337,33 @@ async function generatePaymentLinkAndSend(whatsappId, account, context) {
 
 async function handleNativeInteraction(whatsappId, account, cart, incomingPayload, incomingText) {
   const context = cart.state_context || {};
+  const nativeState = context.native_state;
 
-  if (cart.current_state === 'AWAITING_PRODUCT' && incomingPayload && incomingPayload.startsWith('C_PROD:')) {
+  if (cart.current_state === 'CART_REVIEW' && nativeState === 'AWAITING_PRODUCT' && incomingPayload && incomingPayload.startsWith('C_PROD:')) {
     const idx = parseInt(incomingPayload.split(':')[1], 10);
     await handleProductSelection(whatsappId, account, idx);
     return true;
   }
 
-  if (cart.current_state === 'AWAITING_VARIANTS' && incomingPayload && incomingPayload.startsWith('C_CUT:')) {
+  if (cart.current_state === 'CART_REVIEW' && nativeState === 'AWAITING_VARIANTS' && incomingPayload && incomingPayload.startsWith('C_CUT:')) {
     const idx = parseInt(incomingPayload.split(':')[1], 10);
     await handleCutSelection(whatsappId, account, idx);
     return true;
   }
   
-  if (cart.current_state === 'AWAITING_QUANTITY' && incomingPayload && incomingPayload.startsWith('C_QTY:')) {
+  if (cart.current_state === 'CART_REVIEW' && nativeState === 'AWAITING_QUANTITY' && incomingPayload && incomingPayload.startsWith('C_QTY:')) {
     const qty = incomingPayload.split(':')[1];
     await handleQuantitySelection(whatsappId, account, qty);
     return true;
   }
 
-  if (cart.current_state === 'CART_REVIEW') {
+  if (cart.current_state === 'CART_REVIEW' && nativeState === 'CART_REVIEW') {
     if (incomingText && incomingText.trim().length > 5) {
       context.address = incomingText.trim();
+      context.native_state = 'AWAITING_PAYMENT';
       const client = await pool.connect();
       try {
-        await client.query(`UPDATE coexistence.meenzy_carts SET current_state = 'AWAITING_PAYMENT', state_context = $1 WHERE whatsapp_id = $2 AND status = 'active'`, [JSON.stringify(context), whatsappId]);
+        await client.query(`UPDATE coexistence.meenzy_carts SET current_state = 'CART_REVIEW', state_context = $1 WHERE whatsapp_id = $2 AND status = 'active'`, [JSON.stringify(context), whatsappId]);
       } finally {
         client.release();
       }
