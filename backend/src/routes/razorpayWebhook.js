@@ -54,8 +54,8 @@ router.post('/', async (req, res) => {
             
             // 1. Insert into preorders
             await client.query(`
-              INSERT INTO coexistence.meenzy_preorders (customer_phone, ordered_item, quantity, order_status, address_line)
-              VALUES ($1, $2, $3, 'CONFIRMED', $4)
+              INSERT INTO coexistence.meenzy_preorders (customer_phone, ordered_item, quantity, order_status, address_line, payment_status)
+              VALUES ($1, $2, $3, 'CONFIRMED', $4, 'ONLINE')
             `, [customerPhone, itemName, item.qty, address]);
           }
 

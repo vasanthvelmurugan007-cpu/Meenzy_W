@@ -2055,11 +2055,15 @@ router.post('/webhook/wix-order', async (req, res) => {
 
     // 4. Save to Database with newly generated OTP
     const otp = Math.floor(1000 + Math.random() * 9000).toString();
+    const paymentStatusRaw = order.paymentStatus || 'UNKNOWN';
+    const paymentMethod = order.billingInfo?.paymentMethod || '';
+    const finalPaymentStatus = (paymentStatusRaw === 'PAID' || paymentStatusRaw === 'FULLY_PAID') ? 'ONLINE' : (paymentMethod.toLowerCase().includes('offline') || paymentMethod.toLowerCase().includes('cash')) ? 'COD' : 'UNKNOWN';
+
     const { rows: savedOrder } = await client.query(`
-      INSERT INTO coexistence.ecosystem_orders (wix_order_id, user_phone, total_price, status, address_line, lat, lng, delivery_otp)
-      VALUES ($1, $2, $3, 'CREATED', $4, $5, $6, $7)
+      INSERT INTO coexistence.ecosystem_orders (wix_order_id, user_phone, total_price, status, address_line, lat, lng, delivery_otp, payment_status)
+      VALUES ($1, $2, $3, 'CREATED', $4, $5, $6, $7, $8)
       RETURNING id
-    `, [String(orderId), String(phone), total, addressLine, lat, lng, otp]);
+    `, [String(orderId), String(phone), total, addressLine, lat, lng, otp, finalPaymentStatus]);
 
     const internalOrderId = savedOrder[0].id;
 
@@ -2076,9 +2080,9 @@ router.post('/webhook/wix-order', async (req, res) => {
 
       // Sync to Preorders page with OTP
       await client.query(`
-        INSERT INTO coexistence.meenzy_preorders (customer_phone, ordered_item, quantity, order_status, otp)
-        VALUES ($1, $2, $3, 'pending_market', $4)
-      `, [String(phone).replace(/\D/g, ''), name, qty, otp]);
+        INSERT INTO coexistence.meenzy_preorders (customer_phone, ordered_item, quantity, order_status, otp, payment_status)
+        VALUES ($1, $2, $3, 'pending_market', $4, $5)
+      `, [String(phone).replace(/\D/g, ''), name, qty, otp, finalPaymentStatus]);
 
       itemsSummary.push(`• *${name}* x${qty} - ₹${price}`);
     }

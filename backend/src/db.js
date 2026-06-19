@@ -34,4 +34,12 @@ pool.on('error', (err) => {
   console.error('[DB] Unexpected pool error:', err.message);
 });
 
+// Automatically run simple migrations/schema checks
+pool.query(`
+  ALTER TABLE coexistence.meenzy_preorders 
+  ADD COLUMN IF NOT EXISTS payment_status VARCHAR(50) DEFAULT 'UNKNOWN'
+`).catch(err => {
+  console.log('[DB] Note: Could not add payment_status column (might already exist or permission error).', err.message);
+});
+
 module.exports = pool;

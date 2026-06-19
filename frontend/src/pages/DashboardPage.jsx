@@ -168,8 +168,13 @@ export default function DashboardPage({ user, onPageChange }) {
                       <div style={{ fontSize: 12, color: C.textSecondary, fontWeight: 500 }}>{order.quantity}kg {order.ordered_item}</div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: 12, padding: '4px 10px', borderRadius: 999, background: order.order_status === 'DELIVERED' ? '#dcfce7' : '#fef9c3', color: order.order_status === 'DELIVERED' ? '#166534' : '#854d0e', display: 'inline-block', fontWeight: 600 }}>
-                        {order.order_status}
+                      <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                        <div style={{ fontSize: 11, padding: '4px 8px', borderRadius: 999, background: order.payment_status === 'ONLINE' ? '#e0e7ff' : order.payment_status === 'COD' ? '#ffedd5' : '#f1f5f9', color: order.payment_status === 'ONLINE' ? '#3730a3' : order.payment_status === 'COD' ? '#9a3412' : '#475569', display: 'inline-block', fontWeight: 600 }}>
+                          {order.payment_status || 'UNKNOWN'}
+                        </div>
+                        <div style={{ fontSize: 11, padding: '4px 8px', borderRadius: 999, background: order.order_status === 'DELIVERED' ? '#dcfce7' : '#fef9c3', color: order.order_status === 'DELIVERED' ? '#166534' : '#854d0e', display: 'inline-block', fontWeight: 600 }}>
+                          {order.order_status}
+                        </div>
                       </div>
                       <div style={{ fontSize: 11, color: C.textMuted, marginTop: 6, fontWeight: 500 }}>{order.driver_name || 'Unassigned'}</div>
                     </div>

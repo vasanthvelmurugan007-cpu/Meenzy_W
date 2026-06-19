@@ -41,7 +41,7 @@ router.get('/meenzy/dashboard/stats', async (req, res) => {
     `);
     
     const { rows: recentOrders } = await pool.query(`
-      SELECT p.id, p.customer_phone, p.ordered_item, p.quantity, p.order_status, p.created_at, a.name as driver_name
+      SELECT p.id, p.customer_phone, p.ordered_item, p.quantity, p.order_status, p.payment_status, p.created_at, a.name as driver_name
       FROM coexistence.meenzy_preorders p
       LEFT JOIN coexistence.meenzy_delivery_agents a ON p.driver_id = a.id
       ORDER BY p.created_at DESC

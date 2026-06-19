@@ -136,8 +136,8 @@ async function finalizeCODOrder(whatsappId, account, context) {
       const itemName = `${item.name}${cutText}`;
       
       await client.query(`
-        INSERT INTO coexistence.meenzy_preorders (customer_phone, ordered_item, quantity, order_status, address_line)
-        VALUES ($1, $2, $3, 'CONFIRMED', $4)
+        INSERT INTO coexistence.meenzy_preorders (customer_phone, ordered_item, quantity, order_status, address_line, payment_status)
+        VALUES ($1, $2, $3, 'CONFIRMED', $4, 'COD')
       `, [whatsappId, itemName, item.qty, address]);
     }
 
@@ -163,7 +163,7 @@ async function finalizeCODOrder(whatsappId, account, context) {
 
     await client.query('COMMIT');
 
-    const successMsg = `🎉 *Order Confirmed!*\n\nYour Cash on Delivery order is confirmed and will be delivered to:\n_${address}_\n\nAmount to pay on delivery: ₹${totalAmount}\n\nThank you for choosing Meenzy Fresh Seafood! 🐟`;
+    const successMsg = `🎉 *Order Registered!*\n\nSince we take pre-orders, your Cash on Delivery order has been registered for delivery to:\n_${address}_\n\nAmount to pay on delivery: ₹${totalAmount}\n\nYou will receive a confirmation message once your order is confirmed by our team. Thank you for choosing Meenzy Fresh Seafood! 🐟`;
     const localId = await insertPendingRow({ account, toNumber: whatsappId, messageType: 'text', messageBody: successMsg });
     await enqueueSend({ kind: 'text', accountId: account.id, to: String(whatsappId).replace(/\D/g, ''), localMessageId: localId, payload: { body: successMsg, previewUrl: false } });
 
