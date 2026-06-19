@@ -7,19 +7,13 @@ const { createPaymentLink } = require('../services/razorpayService');
 
 // Native checkout implementation (Wix cart link functionality removed)
 
-// Start the conversational order flow (Repurposed to send Wix product links instead)
+// Start the conversational order flow (Repurposed to send Wix search links instead)
 async function startNativeOrderFlow(whatsappId, account, items) {
   let text = "🐟 *Direct Purchase Links*\n\nYou can complete your purchase directly on our website using the links below:\n\n";
 
   for (const o of items) {
-    const { getHandleForExtractedItem } = require('../catalogParser');
-    const handle = getHandleForExtractedItem(o.item);
-    
-    if (handle) {
-      text += `🛒 *${o.item.toUpperCase()}*\n👉 https://www.meenzy.in/product-page/${handle}\n\n`;
-    } else {
-      text += `🛒 *${o.item.toUpperCase()}*\n👉 Please check our full catalog: https://www.meenzy.in\n\n`;
-    }
+    const searchQuery = encodeURIComponent(o.item);
+    text += `🛒 *${o.item.toUpperCase()}*\n👉 https://www.meenzy.in/search-results?q=${searchQuery}\n\n`;
   }
 
   const localId = await insertPendingRow({ account, toNumber: whatsappId, messageType: 'text', messageBody: text });
