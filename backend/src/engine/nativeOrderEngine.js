@@ -78,8 +78,8 @@ async function startNativeOrderFlow(whatsappId, account, items) {
     if (itemNeedingCutIndex !== -1) {
       await askForCut(whatsappId, account, orderItems[itemNeedingCutIndex], itemNeedingCutIndex);
     } else {
-      // No cuts needed, directly ask for address
-      await askForAddress(whatsappId, account, orderItems);
+      // No cuts needed, directly generate and send Wix Cart Link
+      await generateWixCartAndSend(whatsappId, account, orderItems);
     }
 
   } catch (err) {
@@ -110,31 +110,7 @@ async function askForCut(whatsappId, account, item, index) {
   await enqueueSend({ kind: 'interactive', accountId: account.id, to: String(whatsappId).replace(/\D/g, ''), localMessageId: localId, payload: { interactive: payload } });
 }
 
-async function askForAddress(whatsappId, account, items) {
-  let confMsg = `✅ *Order Summary*\n\n`;
-  let totalAmount = 0;
-
-  for (const order of items) {
-    let itemTotal = 0;
-    if (order.pricePerKg > 0) {
-      itemTotal = order.pricePerKg * order.qty;
-      totalAmount += itemTotal;
-    }
-    const cutText = order.selectedCut ? ` (${order.selectedCut})` : '';
-    confMsg += `• ${order.name}${cutText} - ${order.qty} Kg - ₹${itemTotal.toFixed(2)}\n`;
-  }
-  
-  confMsg += `\n💰 *Total: ₹${totalAmount.toFixed(2)}*\n\n📍 *Please type your complete delivery address below:*`;
-
-  const localId = await insertPendingRow({ account, toNumber: whatsappId, messageType: 'text', messageBody: 'Ask Address' });
-  await enqueueSend({ kind: 'text', accountId: account.id, to: String(whatsappId).replace(/\D/g, ''), localMessageId: localId, payload: { body: confMsg, previewUrl: false } });
-}
-
-async function generatePaymentAndSend(whatsappId, account, items, address) {
-  const totalAmount = items.reduce((sum, item) => sum + (item.qty * item.pricePerKg), 0);
-  const orderId = 'ORD-' + Math.floor(100000 + Math.random() * 900000);
-
-  // Generate Wix Cart Link
+async function generateWixCartAndSend(whatsappId, account, items) {
   const wixItems = [];
   for (const item of items) {
     const wixId = resolveWixProductId(item.name, item.selectedCut);
@@ -158,55 +134,31 @@ async function generatePaymentAndSend(whatsappId, account, items, address) {
     }
   }
 
-  // Generate Razorpay Link
-  const paymentLinkResponse = await createPaymentLink({
-    amount: totalAmount,
-    phone: whatsappId,
-    description: `Meenzy Order ${orderId}`,
-    referenceId: orderId
-  });
-
-  if (paymentLinkResponse.ok) {
-    // Save to DB as pending payment
+  if (wixCartUrl) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      
-      // Update cart to awaiting payment and store orderId, address and payment ID
       await client.query(`
         UPDATE coexistence.meenzy_carts 
-        SET current_state = 'CART_REVIEW', 
-            state_context = jsonb_set(
-                jsonb_set(
-                    jsonb_set(state_context, '{orderId}', $1::jsonb),
-                    '{paymentLinkId}', $2::jsonb
-                ),
-                '{native_state}', '"AWAITING_PAYMENT"'::jsonb
-            ) || jsonb_build_object('address', $3::text),
+        SET current_state = 'COMPLETED', 
+            status = 'converted', 
             updated_at = NOW()
-        WHERE whatsapp_id = $4 AND status = 'active'
-      `, [`"${orderId}"`, `"${paymentLinkResponse.id}"`, address, whatsappId]);
-      
+        WHERE whatsapp_id = $1 AND status = 'active'
+      `, [whatsappId]);
       await client.query('COMMIT');
-      
-      let msg = `💳 *Complete Your Payment*\n\n`;
-      if (wixCartUrl) {
-        msg += `🛒 *Review your cart on our website:*\n🔗 ${wixCartUrl}\n\n`;
-      }
-      msg += `Tap the link below to pay securely:\n🔗 ${paymentLinkResponse.short_url}\n\n_Your order will be confirmed automatically after payment._`;
-      
-      const localId = await insertPendingRow({ account, toNumber: whatsappId, messageType: 'text', messageBody: 'Payment Link' });
-      await enqueueSend({ kind: 'text', accountId: account.id, to: String(whatsappId).replace(/\D/g, ''), localMessageId: localId, payload: { body: msg, previewUrl: true } });
-      
     } catch (e) {
       await client.query('ROLLBACK');
-      console.error(e);
+      console.error('[nativeOrderEngine] DB update status error:', e.message);
     } finally {
       client.release();
     }
+
+    const msg = `🛒 *Your Meenzy Cart is Ready!*\n\nTap the link below to complete your checkout and payment on our website:\n🔗 ${wixCartUrl}\n\n_Your items have been added automatically!_`;
+    const localId = await insertPendingRow({ account, toNumber: whatsappId, messageType: 'text', messageBody: 'Wix Cart Link' });
+    await enqueueSend({ kind: 'text', accountId: account.id, to: String(whatsappId).replace(/\D/g, ''), localMessageId: localId, payload: { body: msg, previewUrl: true } });
   } else {
-    const errorMsg = `❌ Sorry, we couldn't generate a payment link at this moment. Please try again later.`;
-    const localId = await insertPendingRow({ account, toNumber: whatsappId, messageType: 'text', messageBody: 'Payment Link Error' });
+    const errorMsg = `❌ Sorry, we couldn't generate your cart link. Please try again or visit our website: https://www.meenzy.in`;
+    const localId = await insertPendingRow({ account, toNumber: whatsappId, messageType: 'text', messageBody: 'Wix Cart Error' });
     await enqueueSend({ kind: 'text', accountId: account.id, to: String(whatsappId).replace(/\D/g, ''), localMessageId: localId, payload: { body: errorMsg, previewUrl: false } });
   }
 }
@@ -235,11 +187,11 @@ async function handleNativeInteraction(whatsappId, account, cart, incomingPayloa
             await client.query(`UPDATE coexistence.meenzy_carts SET state_context = $1 WHERE whatsapp_id = $2 AND status = 'active'`, [JSON.stringify(context), whatsappId]);
             await askForCut(whatsappId, account, items[nextItemNeedingCutIndex], nextItemNeedingCutIndex);
           } else {
-            // All cuts done! Ask for address.
+            // All cuts done! Generate and send Wix Cart Link
             context.currentItemIndex = -1;
-            context.native_state = 'AWAITING_ADDRESS';
+            context.native_state = 'COMPLETED';
             await client.query(`UPDATE coexistence.meenzy_carts SET state_context = $1 WHERE whatsapp_id = $2 AND status = 'active'`, [JSON.stringify(context), whatsappId]);
-            await askForAddress(whatsappId, account, items);
+            await generateWixCartAndSend(whatsappId, account, items);
           }
         } finally {
           client.release();
@@ -248,14 +200,6 @@ async function handleNativeInteraction(whatsappId, account, cart, incomingPayloa
       }
     }
     return false;
-  }
-
-  if (cart.current_state === 'CART_REVIEW' && nativeState === 'AWAITING_ADDRESS') {
-    if (incomingText && incomingText.trim().length > 5) { // Ensure they actually typed an address
-      const address = incomingText.trim();
-      await generatePaymentAndSend(whatsappId, account, items, address);
-      return true;
-    }
   }
 
   return false;
