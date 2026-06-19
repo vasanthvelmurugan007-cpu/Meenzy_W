@@ -180,6 +180,7 @@ export default function AgentPortalPage() {
   
   // Map and Routing State
   const mapRef = useRef(null);
+  const initialFitDone = useRef(false);
   const [agentLocation, setAgentLocation] = useState(null); // {lat, lng}
   const [allRoutes, setAllRoutes] = useState([]); // Store alternative routes
   const [selectedRouteIndex, setSelectedRouteIndex] = useState(0);
@@ -377,13 +378,19 @@ export default function AgentPortalPage() {
               const minLat = Math.min(...lats);
               const maxLat = Math.max(...lats);
 
-              mapRef.current.fitBounds(
-                [[minLng, minLat], [maxLng, maxLat]],
-                { padding: 40, duration: 1000 }
-              );
+              if (!initialFitDone.current) {
+                mapRef.current.fitBounds(
+                  [[minLng, minLat], [maxLng, maxLat]],
+                  { padding: 40, duration: 1000 }
+                );
+                initialFitDone.current = true;
+              }
             } else if (!agentLocation && stops.length > 0) {
               const firstStop = stops[0].split(',');
-              setViewState(prev => ({ ...prev, longitude: parseFloat(firstStop[0]), latitude: parseFloat(firstStop[1]) }));
+              if (!initialFitDone.current) {
+                setViewState(prev => ({ ...prev, longitude: parseFloat(firstStop[0]), latitude: parseFloat(firstStop[1]) }));
+                initialFitDone.current = true;
+              }
             }
           }
         }
