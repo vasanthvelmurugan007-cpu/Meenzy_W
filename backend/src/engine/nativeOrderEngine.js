@@ -1,9 +1,9 @@
 const pool = require('../db');
 const { insertPendingRow } = require('../services/messageSender');
 const { enqueueSend } = require('../queue/sendQueue');
-const { getPriceForExtractedItem, getCutOptionsForExtractedItem } = require('../catalogParser');
+const { getPriceForExtractedItem, getCutOptionsForExtractedItem, getImageUrlForExtractedItem } = require('../catalogParser');
 const { createPaymentLink } = require('../services/razorpayService');
-const { getProductImageByName } = require('../services/wixCatalogFetcher');
+
 
 // Native checkout implementation (Wix cart link functionality removed)
 
@@ -78,7 +78,7 @@ async function askForCut(whatsappId, account, item, index) {
     }
   }));
 
-  const imageUrl = await getProductImageByName(item.name);
+  const imageUrl = getImageUrlForExtractedItem(item.name);
 
   const payload = {
     type: "button",

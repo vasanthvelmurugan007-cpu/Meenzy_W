@@ -131,6 +131,7 @@ async function getProductImageByName(productName) {
   // Match as generously as possible
   const target = productName.toLowerCase().trim();
   const found = cachedCatalog.find(p => p.name.toLowerCase().includes(target));
+  console.log(`[wixCatalogFetcher] getProductImageByName("${productName}") -> found: ${found ? found.name : 'null'}, imageUrl: ${found ? found.image_url : 'null'}`);
   return found ? found.image_url : null;
 }
 

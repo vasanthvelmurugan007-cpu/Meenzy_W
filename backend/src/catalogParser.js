@@ -69,7 +69,8 @@ function loadCatalog() {
             catalogMap[currentProductName] = {
                 name: currentProductName,
                 pricePerKg: 0,
-                cutOptions: cuts
+                cutOptions: cuts,
+                imageUrl: null
             };
         } else {
             catalogMap[currentProductName].cutOptions = cuts;
@@ -91,6 +92,13 @@ function loadCatalog() {
         if (catalogMap[currentProductName].pricePerKg === 0 || pricePerKg < catalogMap[currentProductName].pricePerKg) {
             catalogMap[currentProductName].pricePerKg = pricePerKg;
         }
+        }
+      } else if (type === 'MEDIA' && handle === currentHandle) {
+        if (!catalogMap[currentProductName].imageUrl) {
+          const mediaFile = parts[7];
+          if (mediaFile && mediaFile.trim() !== '') {
+            catalogMap[currentProductName].imageUrl = `https://static.wixstatic.com/media/${mediaFile.trim()}`;
+          }
         }
       }
     }
@@ -133,8 +141,24 @@ function getCutOptionsForExtractedItem(itemName) {
   return [];
 }
 
+function getImageUrlForExtractedItem(itemName) {
+  const catalog = loadCatalog();
+  if (!catalog) return null;
+  
+  const query = itemName.toLowerCase();
+  
+  for (const key of Object.keys(catalog)) {
+    const baseNames = key.toLowerCase().split('/').map(s => s.trim());
+    if (baseNames.some(n => query.includes(n) || n.includes(query))) {
+      return catalog[key].imageUrl || null;
+    }
+  }
+  return null;
+}
+
 module.exports = {
   loadCatalog,
   getPriceForExtractedItem,
-  getCutOptionsForExtractedItem
+  getCutOptionsForExtractedItem,
+  getImageUrlForExtractedItem
 };
