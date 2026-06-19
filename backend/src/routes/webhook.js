@@ -2084,4 +2084,4 @@ router.post('/webhook/wix-order', async (req, res) => {
   }
 });
 
-module.exports = { router, fetchCatalogProducts };
+module.exports = { router };
