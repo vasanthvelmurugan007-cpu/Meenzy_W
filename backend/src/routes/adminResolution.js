@@ -620,5 +620,26 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/admin/apply-jitter
+ * Temporary endpoint to retroactively apply jitter to existing coordinates.
+ */
+router.get('/apply-jitter', async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT id, lat, lng FROM coexistence.ecosystem_orders WHERE lat IS NOT NULL AND lng IS NOT NULL');
+    let updates = 0;
+    for (const order of rows) {
+      const jLat = (Math.random() - 0.5) * 0.001;
+      const jLng = (Math.random() - 0.5) * 0.001;
+      await pool.query('UPDATE coexistence.ecosystem_orders SET lat = lat + $1, lng = lng + $2 WHERE id = $3', [jLat, jLng, order.id]);
+      updates++;
+    }
+    res.json({ ok: true, message: `Successfully applied jitter to ${updates} existing orders.` });
+  } catch (err) {
+    console.error('Jitter apply error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = { router };
 
