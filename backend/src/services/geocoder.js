@@ -15,26 +15,8 @@ async function geocodeAddress(address) {
   const openCageKey = process.env.OPENCAGE_API_KEY;
   if (openCageKey) {
     try {
-      // ── Strategy 1: Pincode-first (most accurate for Indian addresses) ──
-      if (pincode) {
-        const pincodeUrl = `https://api.opencagedata.com/geocode/v1/json?q=${encodeURIComponent(pincode + ', India')}&key=${openCageKey}&limit=1&countrycode=in`;
-        const pincodeResp = await fetch(pincodeUrl, { signal: AbortSignal.timeout(5000) });
-        if (pincodeResp.ok) {
-          const pincodeData = await pincodeResp.json();
-          if (pincodeData.results && pincodeData.results.length > 0) {
-            const r = pincodeData.results[0];
-            const { lat, lng } = r.geometry;
-            console.log(`[Geocoder] OpenCage pincode "${pincode}" -> Lat: ${lat}, Lng: ${lng} (confidence: ${r.confidence})`);
-            // Validate it's in India (lat 6–37, lng 68–97)
-            if (lat >= 6 && lat <= 37 && lng >= 68 && lng <= 97) {
-              return { lat, lng };
-            }
-            console.log(`[Geocoder] Pincode result out of India bounds — skipping.`);
-          }
-        }
-      }
-
-      // ── Strategy 2: Full address with countrycode=IN restriction ──
+      // ── Strategy 1: Full Address Geocoding ──
+      // We pass the full address (which usually includes the pincode) for precise house/street level geocoding
       const fullUrl = `https://api.opencagedata.com/geocode/v1/json?q=${encodeURIComponent(address)}&key=${openCageKey}&limit=1&countrycode=in`;
       const fullResp = await fetch(fullUrl, { signal: AbortSignal.timeout(5000) });
       if (fullResp.ok) {
@@ -55,9 +37,9 @@ async function geocodeAddress(address) {
     }
   }
 
-  // ── Fallback: Nominatim (OpenStreetMap) — pincode first, then full address ──
+  // ── Fallback: Nominatim (OpenStreetMap) ──
   try {
-    const query = pincode ? `${pincode}, India` : address;
+    const query = address;
     const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=in`;
     const response = await fetch(url, {
       headers: { 'User-Agent': 'ForgeCRM/1.0 (Delivery Routing Engine)' },
