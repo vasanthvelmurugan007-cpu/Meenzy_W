@@ -915,7 +915,8 @@ router.post('/webhook/whatsapp', async (req, res) => {
         if (r.direction === 'incoming' && r.message_body && !r.__handled) {
           const trimmedBody = r.message_body.trim().toLowerCase();
           
-          if (trimmedBody === 'hi iam agent') {
+          const agentTrigger = trimmedBody.replace(/[^a-z]/g, '');
+          if (agentTrigger === 'hiiamagent' || agentTrigger === 'hiiamanagent' || agentTrigger === 'iamagent' || agentTrigger === 'agentlogin' || agentTrigger === 'hiagent') {
             // Check if sender is a Delivery Agent
             const agentRes = await client.query('SELECT id, name, phone, plain_pin FROM coexistence.delivery_agents WHERE RIGHT(REGEXP_REPLACE(phone, \'\\D\', \'\', \'g\'), 10) = RIGHT(REGEXP_REPLACE($1, \'\\D\', \'\', \'g\'), 10)', [r.contact_number]);
             if (agentRes.rows.length > 0) {
