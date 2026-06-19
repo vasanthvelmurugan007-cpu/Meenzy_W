@@ -13,12 +13,56 @@ async function geocodeAddress(address) {
   const pincode = pincodeMatch ? pincodeMatch[1] : null;
 
   const openCageKey = process.env.OPENCAGE_API_KEY;
+  const groqKey = process.env.GROQ_API_KEY;
   let result = null;
+
+  // ── AI Address Sanitization ──
+  let cleanedAddress = address;
+  if (groqKey && address.length > 20) {
+    try {
+      const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${groqKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "llama3-8b-8192",
+          messages: [{ role: "user", content: `Extract ONLY the town/locality, city, and pincode from this messy Indian address. Return ONLY a clean comma-separated string like "Kattankulathur, Chennai, 603203". Do not include door numbers, street names, or any other text. Address: ${address}` }],
+          temperature: 0,
+          max_tokens: 20
+        }),
+        signal: AbortSignal.timeout(3000)
+      });
+      if (resp.ok) {
+        const json = await resp.json();
+        const content = json.choices[0]?.message?.content?.trim();
+        if (content && !content.toLowerCase().includes('cannot') && content.length < 50) {
+          cleanedAddress = content.replace(/["']/g, '');
+          console.log(`[Geocoder] AI Cleaned Address: "${address}" -> "${cleanedAddress}"`);
+        }
+      }
+    } catch(e) {
+      console.error('[Geocoder] AI cleanup failed:', e.message);
+    }
+  }
 
   if (openCageKey) {
     try {
-      // ── Strategy 1: Pincode-first (most accurate for messy Indian addresses) ──
-      if (pincode) {
+      // ── Strategy 1: AI Cleaned Address Geocoding ──
+      const fullUrl = `https://api.opencagedata.com/geocode/v1/json?q=${encodeURIComponent(cleanedAddress + ', India')}&key=${openCageKey}&limit=1&countrycode=in`;
+      const fullResp = await fetch(fullUrl, { signal: AbortSignal.timeout(5000) });
+      if (fullResp.ok) {
+        const fullData = await fullResp.json();
+        if (fullData.results && fullData.results.length > 0) {
+          const r = fullData.results[0];
+          const { lat, lng } = r.geometry;
+          if (lat >= 6 && lat <= 37 && lng >= 68 && lng <= 97 && r.confidence >= 3) {
+            console.log(`[Geocoder] OpenCage Cleaned Address "${cleanedAddress}" -> Lat: ${lat}, Lng: ${lng}`);
+            result = { lat, lng };
+          }
+        }
+      }
+
+      // ── Strategy 2: Pincode Fallback ──
+      if (!result && pincode) {
         const pincodeUrl = `https://api.opencagedata.com/geocode/v1/json?q=${encodeURIComponent(pincode + ', India')}&key=${openCageKey}&limit=1&countrycode=in`;
         const pincodeResp = await fetch(pincodeUrl, { signal: AbortSignal.timeout(5000) });
         if (pincodeResp.ok) {
@@ -33,23 +77,6 @@ async function geocodeAddress(address) {
           }
         }
       }
-
-      // ── Strategy 2: Full Address Geocoding ──
-      if (!result) {
-        const fullUrl = `https://api.opencagedata.com/geocode/v1/json?q=${encodeURIComponent(address)}&key=${openCageKey}&limit=1&countrycode=in`;
-        const fullResp = await fetch(fullUrl, { signal: AbortSignal.timeout(5000) });
-        if (fullResp.ok) {
-          const fullData = await fullResp.json();
-          if (fullData.results && fullData.results.length > 0) {
-            const r = fullData.results[0];
-            const { lat, lng } = r.geometry;
-            if (lat >= 6 && lat <= 37 && lng >= 68 && lng <= 97 && r.confidence >= 5) {
-              console.log(`[Geocoder] OpenCage full address -> Lat: ${lat}, Lng: ${lng}`);
-              result = { lat, lng };
-            }
-          }
-        }
-      }
     } catch (error) {
       console.error('[Geocoder] OpenCage error, falling back to Nominatim:', error.message);
     }
@@ -58,7 +85,7 @@ async function geocodeAddress(address) {
   // ── Fallback: Nominatim (OpenStreetMap) ──
   if (!result) {
     try {
-      const query = pincode ? `${pincode}, India` : address;
+      const query = cleanedAddress || (pincode ? `${pincode}, India` : address);
       const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=in`;
       const response = await fetch(url, {
         headers: { 'User-Agent': 'ForgeCRM/1.0 (Delivery Routing Engine)' },

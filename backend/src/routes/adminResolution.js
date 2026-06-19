@@ -641,5 +641,30 @@ router.get('/apply-jitter', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/admin/re-geocode
+ * Temporary endpoint to retroactively re-geocode orders using AI address cleanup.
+ */
+router.get('/re-geocode', async (req, res) => {
+  try {
+    const { geocodeAddress } = require('../services/geocoder');
+    const { rows } = await pool.query("SELECT id, address_line FROM coexistence.ecosystem_orders WHERE status IN ('CREATED', 'CONFIRMED', 'VERIFIED_READY', 'PACKED', 'DISPATCHED_TO_3PL')");
+    let updates = 0;
+    for (const order of rows) {
+      if (order.address_line) {
+        const coords = await geocodeAddress(order.address_line);
+        if (coords) {
+          await pool.query('UPDATE coexistence.ecosystem_orders SET lat = $1, lng = $2 WHERE id = $3', [coords.lat, coords.lng, order.id]);
+          updates++;
+        }
+      }
+    }
+    res.json({ ok: true, message: `Successfully re-geocoded ${updates} active orders using AI cleanup.` });
+  } catch (err) {
+    console.error('Re-geocode error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = { router };
 
