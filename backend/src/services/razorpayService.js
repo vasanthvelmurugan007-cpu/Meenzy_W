@@ -7,9 +7,12 @@ function getRazorpay() {
     if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
       console.warn('[razorpayService] RAZORPAY_KEY_ID or RAZORPAY_KEY_SECRET not set in env variables!');
     }
+    const keyId = (process.env.RAZORPAY_KEY_ID || 'rzp_test_dummyKeyId').trim();
+    const keySecret = (process.env.RAZORPAY_KEY_SECRET || 'dummyKeySecret').trim();
+    console.log(`[razorpayService] Initializing with Key ID: ${keyId.substring(0, 8)}... (Length: ${keyId.length})`);
     razorpayInstance = new Razorpay({
-      key_id: process.env.RAZORPAY_KEY_ID || 'rzp_test_dummyKeyId',
-      key_secret: process.env.RAZORPAY_KEY_SECRET || 'dummyKeySecret'
+      key_id: keyId,
+      key_secret: keySecret
     });
   }
   return razorpayInstance;
