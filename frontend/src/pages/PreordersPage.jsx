@@ -314,6 +314,7 @@ export default function PreordersPage() {
                       <th style={{ padding: '12px 20px' }}>Quantity (kg)</th>
                       <th style={{ padding: '12px 20px' }}>Delivery Date</th>
                       <th style={{ padding: '12px 20px' }}>Order Status</th>
+                      <th style={{ padding: '12px 20px' }}>Payment</th>
                       <th style={{ padding: '12px 20px' }}>Assign Agent</th>
                       <th style={{ padding: '12px 20px', textAlign: 'center' }}>Actions</th>
                     </tr>
@@ -340,6 +341,15 @@ export default function PreordersPage() {
                                 {order.notes}
                               </div>
                             )}
+                          </td>
+                          <td style={{ padding: '14px 20px' }}>
+                            <span style={{
+                              padding: '4px 8px', borderRadius: 4, fontSize: 11, fontWeight: 700,
+                              background: order.payment_status === 'PAID' ? '#dcfce7' : '#fee2e2',
+                              color: order.payment_status === 'PAID' ? '#16a34a' : '#ef4444'
+                            }}>
+                              {order.payment_status === 'PAID' ? 'ONLINE' : 'COD'}
+                            </span>
                           </td>
                           <td style={{ padding: '14px 20px' }}>
                             <select
