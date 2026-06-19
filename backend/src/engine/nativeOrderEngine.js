@@ -160,11 +160,23 @@ async function finalizeCODOrder(whatsappId, account, context) {
       cut: i.selectedCut
     })));
 
-    await client.query(`
-      INSERT INTO coexistence.ecosystem_orders 
-      (user_phone, total_amount, status, payment_status, source, address_line, order_items)
-      VALUES ($1, $2, 'CREATED', 'COD', 'WHATSAPP_NATIVE', $3, $4::jsonb)
-    `, [whatsappId, totalAmount, address, orderItemsJson]);
+    try {
+      await client.query(`
+        INSERT INTO coexistence.ecosystem_orders 
+        (user_phone, total_amount, status, payment_status, source, address_line, order_items)
+        VALUES ($1, $2, 'CREATED', 'COD', 'WHATSAPP_NATIVE', $3, $4::jsonb)
+      `, [whatsappId, totalAmount, address, orderItemsJson]);
+    } catch (ecoErr) {
+      if (ecoErr.code === '42703') { // undefined_column
+        await client.query(`
+          INSERT INTO coexistence.ecosystem_orders 
+          (user_phone, total_amount, status, source, address_line, order_items)
+          VALUES ($1, $2, 'CREATED', 'WHATSAPP_NATIVE', $3, $4::jsonb)
+        `, [whatsappId, totalAmount, address, orderItemsJson]);
+      } else {
+        throw ecoErr;
+      }
+    }
 
     await client.query(`
       UPDATE coexistence.meenzy_carts 

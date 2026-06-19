@@ -79,11 +79,23 @@ router.post('/', async (req, res) => {
              cut: i.selectedCut
           })));
 
-          await client.query(`
-            INSERT INTO coexistence.ecosystem_orders 
-            (user_phone, total_amount, status, payment_status, source, address_line, order_items)
-            VALUES ($1, $2, 'CONFIRMED', 'PAID', 'WHATSAPP_NATIVE', $3, $4::jsonb)
-          `, [customerPhone, totalAmount, address, orderItemsJson]);
+          try {
+            await client.query(`
+              INSERT INTO coexistence.ecosystem_orders 
+              (user_phone, total_amount, status, payment_status, source, address_line, order_items)
+              VALUES ($1, $2, 'CONFIRMED', 'PAID', 'WHATSAPP_NATIVE', $3, $4::jsonb)
+            `, [customerPhone, totalAmount, address, orderItemsJson]);
+          } catch (ecoErr) {
+            if (ecoErr.code === '42703') { // undefined_column
+              await client.query(`
+                INSERT INTO coexistence.ecosystem_orders 
+                (user_phone, total_amount, status, source, address_line, order_items)
+                VALUES ($1, $2, 'CONFIRMED', 'WHATSAPP_NATIVE', $3, $4::jsonb)
+              `, [customerPhone, totalAmount, address, orderItemsJson]);
+            } else {
+              throw ecoErr;
+            }
+          }
 
           // 3. Mark cart as COMPLETED
           await client.query(`
