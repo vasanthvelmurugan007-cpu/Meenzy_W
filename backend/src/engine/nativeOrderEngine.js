@@ -26,25 +26,26 @@ async function startNativeOrderFlow(whatsappId, account, items) {
 
   const stateContext = {
     items: orderItems,
-    currentItemIndex: itemNeedingCutIndex
+    currentItemIndex: itemNeedingCutIndex,
+    native_state: itemNeedingCutIndex !== -1 ? 'AWAITING_CUT' : 'AWAITING_ADDRESS'
   };
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     
-    // Create or update cart for native order flow
+    // Create or update cart for native order flow using a valid enum state (CART_REVIEW)
     await client.query(`
       INSERT INTO coexistence.meenzy_carts (whatsapp_id, current_state, state_context, status, cart_items, updated_at)
-      VALUES ($1, $2, $3, 'active', '[]'::jsonb, now())
+      VALUES ($1, 'CART_REVIEW', $2, 'active', '[]'::jsonb, now())
       ON CONFLICT (whatsapp_id) 
       DO UPDATE SET 
-        current_state = $2, 
-        state_context = $3,
+        current_state = 'CART_REVIEW', 
+        state_context = $2,
         status = 'active',
         cart_items = '[]'::jsonb,
         updated_at = now()
-    `, [whatsappId, itemNeedingCutIndex !== -1 ? 'AWAITING_CUT' : 'AWAITING_ADDRESS', JSON.stringify(stateContext)]);
+    `, [whatsappId, JSON.stringify(stateContext)]);
     
     await client.query('COMMIT');
 
@@ -125,11 +126,17 @@ async function generatePaymentAndSend(whatsappId, account, items, address) {
       // Update cart to awaiting payment and store orderId, address and payment ID
       await client.query(`
         UPDATE coexistence.meenzy_carts 
-        SET current_state = 'AWAITING_PAYMENT', 
-            state_context = jsonb_set(state_context, '{orderId}', $1::jsonb) || jsonb_build_object('paymentLinkId', $2::text, 'address', $3::text),
+        SET current_state = 'CART_REVIEW', 
+            state_context = jsonb_set(
+                jsonb_set(
+                    jsonb_set(state_context, '{orderId}', $1::jsonb),
+                    '{paymentLinkId}', $2::jsonb
+                ),
+                '{native_state}', '"AWAITING_PAYMENT"'::jsonb
+            ) || jsonb_build_object('address', $3::text),
             updated_at = NOW()
         WHERE whatsapp_id = $4 AND status = 'active'
-      `, [`"${orderId}"`, paymentLinkResponse.id, address, whatsappId]);
+      `, [`"${orderId}"`, `"${paymentLinkResponse.id}"`, address, whatsappId]);
       
       await client.query('COMMIT');
       
@@ -153,8 +160,9 @@ async function generatePaymentAndSend(whatsappId, account, items, address) {
 async function handleNativeInteraction(whatsappId, account, cart, incomingPayload, incomingText) {
   const context = cart.state_context || {};
   const items = context.items || [];
+  const nativeState = context.native_state;
 
-  if (cart.current_state === 'AWAITING_CUT') {
+  if (cart.current_state === 'CART_REVIEW' && nativeState === 'AWAITING_CUT') {
     if (incomingPayload && incomingPayload.startsWith('C_CUT:')) {
       const parts = incomingPayload.split(':');
       const itemIdx = parseInt(parts[1], 10);
@@ -170,12 +178,13 @@ async function handleNativeInteraction(whatsappId, account, cart, incomingPayloa
         try {
           if (nextItemNeedingCutIndex !== -1) {
             context.currentItemIndex = nextItemNeedingCutIndex;
-            await client.query(`UPDATE coexistence.meenzy_carts SET state_context = $1 WHERE whatsapp_id = $2`, [JSON.stringify(context), whatsappId]);
+            await client.query(`UPDATE coexistence.meenzy_carts SET state_context = $1 WHERE whatsapp_id = $2 AND status = 'active'`, [JSON.stringify(context), whatsappId]);
             await askForCut(whatsappId, account, items[nextItemNeedingCutIndex], nextItemNeedingCutIndex);
           } else {
             // All cuts done! Ask for address.
             context.currentItemIndex = -1;
-            await client.query(`UPDATE coexistence.meenzy_carts SET current_state = 'AWAITING_ADDRESS', state_context = $1 WHERE whatsapp_id = $2`, [JSON.stringify(context), whatsappId]);
+            context.native_state = 'AWAITING_ADDRESS';
+            await client.query(`UPDATE coexistence.meenzy_carts SET state_context = $1 WHERE whatsapp_id = $2 AND status = 'active'`, [JSON.stringify(context), whatsappId]);
             await askForAddress(whatsappId, account, items);
           }
         } finally {
@@ -187,7 +196,7 @@ async function handleNativeInteraction(whatsappId, account, cart, incomingPayloa
     return false;
   }
 
-  if (cart.current_state === 'AWAITING_ADDRESS') {
+  if (cart.current_state === 'CART_REVIEW' && nativeState === 'AWAITING_ADDRESS') {
     if (incomingText && incomingText.trim().length > 5) { // Ensure they actually typed an address
       const address = incomingText.trim();
       await generatePaymentAndSend(whatsappId, account, items, address);

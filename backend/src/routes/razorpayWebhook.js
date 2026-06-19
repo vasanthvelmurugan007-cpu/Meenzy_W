@@ -33,7 +33,8 @@ router.post('/', async (req, res) => {
         // Look up the cart that has this orderId
         const cartRes = await client.query(`
           SELECT * FROM coexistence.meenzy_carts 
-          WHERE current_state = 'AWAITING_PAYMENT' 
+          WHERE current_state = 'CART_REVIEW' 
+          AND state_context->>'native_state' = 'AWAITING_PAYMENT'
           AND state_context->>'paymentLinkId' = $1
         `, [paymentId]);
 
@@ -77,7 +78,7 @@ router.post('/', async (req, res) => {
           await client.query(`
             UPDATE coexistence.meenzy_carts 
             SET current_state = 'COMPLETED', status = 'converted', updated_at = NOW()
-            WHERE whatsapp_id = $1 AND current_state = 'AWAITING_PAYMENT'
+            WHERE whatsapp_id = $1 AND current_state = 'CART_REVIEW' AND state_context->>'native_state' = 'AWAITING_PAYMENT'
           `, [customerPhone]);
 
           await client.query('COMMIT');
