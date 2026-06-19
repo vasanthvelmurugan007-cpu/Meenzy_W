@@ -95,9 +95,9 @@ router.post('/', async (req, res) => {
             if (ecoErr.code === '42703') { // undefined_column
               await client.query(`
                 INSERT INTO coexistence.ecosystem_orders 
-                (user_phone, total_price, status, source, address_line, order_items)
-                VALUES ($1, $2, 'CONFIRMED', 'WHATSAPP_NATIVE', $3, $4::jsonb)
-              `, [customerPhone, totalAmount, address, orderItemsJson]);
+                (user_phone, total_price, status, address_line)
+                VALUES ($1, $2, 'CONFIRMED', $3)
+              `, [customerPhone, totalAmount, address]);
             } else {
               throw ecoErr;
             }
