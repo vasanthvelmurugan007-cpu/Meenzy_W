@@ -1006,63 +1006,7 @@ router.post('/webhook/whatsapp', async (req, res) => {
           }
         }
 
-        // MEENZY Custom Workflow Rule 2: Inbound Regex Parser Engine for preorders (Simple Format: Fish Name, Qty)
-        if (r.direction === 'incoming' && r.message_body) {
-          const trimmedBody = r.message_body.trim();
-          const match = trimmedBody.match(/^([a-zA-Z\s\/]+)[,\s]+(\d+(?:\.\d+)?)\s*(?:kg|kgs)?$/i);
-          if (match) {
-            const item = match[1].trim().toLowerCase();
-            const qty = parseFloat(match[2]);
-            
-            let resolvedItem = null;
-            if (item.includes('seer') || item.includes('vanjaram')) {
-              resolvedItem = 'Seer Fish / Vanjaram';
-            } else if (item.includes('pomfret')) {
-              resolvedItem = 'Pomfret';
-            } else if (item.includes('prawn') || item.includes('iral')) {
-              resolvedItem = 'White Prawns / Iral';
-            } else if (item.includes('rohu')) {
-              resolvedItem = 'Rohu';
-            }
-
-            if (resolvedItem) {
-              await client.query(
-                `INSERT INTO coexistence.meenzy_preorders (customer_phone, ordered_item, quantity, order_status)
-                 VALUES ($1, $2, $3, 'PENDING_CHECKOUT')`,
-                [r.contact_number, resolvedItem, qty]
-              );
-              console.log(`[meenzy-preorder] Successfully created preorder: customer=${r.contact_number}, item=${resolvedItem}, quantity=${qty}`);
-              
-              // Send WhatsApp Order Confirmation Message with Cart Link
-              const { resolveAccount, insertPendingRow } = require('../services/messageSender');
-              const { enqueueSend } = require('../queue/sendQueue');
-              const { account, error } = await resolveAccount({});
-              if (!error && account) {
-                const cartPayload = [{ item: resolvedItem, qty }];
-                const base64Cart = Buffer.from(JSON.stringify(cartPayload)).toString('base64');
-                const encodedCart = encodeURIComponent(base64Cart);
-                const checkoutUrl = `https://www.meenzy.in/cart-page?data=${encodedCart}&phone=${r.contact_number}`;
-                
-                const confText = `🐟 *Meenzy Preorder Initiated!* 🌊\n\nYour preorder for *${resolvedItem} (${qty} kg)* is almost ready!\n\nPlease click the link below to review your exact order details, see the price, and securely checkout on our website:\n${checkoutUrl}\n\nThank you! 🍽️`;
-                const localId = await insertPendingRow({
-                  account,
-                  toNumber: r.contact_number,
-                  messageType: 'text',
-                  messageBody: confText,
-                });
-                await enqueueSend({
-                  kind: 'text',
-                  accountId: account.id,
-                  to: String(r.contact_number).replace(/\D/g, ''),
-                  localMessageId: localId,
-                  payload: { body: confText, previewUrl: true },
-                });
-                console.log(`[meenzy-preorder] Sent registration confirmation to: ${r.contact_number}`);
-              }
-              r.__handled = true;
-            }
-          }
-        }
+        // MEENZY Custom Workflow Rule 2 (Inbound Regex Parser Engine) was removed so all text/voice orders use Native Conversational Flow (Rule 6).
 
         // MEENZY Custom Workflow Rule 2.5: Inbound WhatsApp Native Order Parser
         if (r.direction === 'incoming' && r.message_type === 'order' && r.raw_payload) {

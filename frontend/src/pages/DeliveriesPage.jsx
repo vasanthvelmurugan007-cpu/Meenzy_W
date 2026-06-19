@@ -425,7 +425,7 @@ export default function DeliveriesPage() {
 
             {/* Draw All Map Orders (Hide if heatmap is showing for cleaner UI) */}
             {!showHeatmap && orders.filter(o => o.lat && o.lng && !isNaN(parseFloat(o.lat)) && !isNaN(parseFloat(o.lng))).map(order => {
-              const isUnassigned = (order.status === 'CONFIRMED' || order.status === 'CREATED') && !order.assigned_agent_id;
+              const isUnassigned = ['CREATED','CONFIRMED','VERIFIED_READY','PACKED'].includes(order.status) && !order.assigned_agent_id;
               const isDelivered = order.status === 'DELIVERED';
               const isAssigned = !!order.assigned_agent_id && !isDelivered && order.status !== 'CANCELLED' && order.status !== 'DELIVERY_FAILED_DISPUTED';
               const isIssue = order.status === 'DELIVERY_FAILED_DISPUTED' || order.status === 'CANCELLED';
@@ -479,7 +479,7 @@ export default function DeliveriesPage() {
                   {selectedOrder.assigned_agent_id && (
                     <p style={{ fontSize: 11, fontWeight: 600, color: '#374151', margin: '0 0 8px 0' }}>Agent: {getAgentName(selectedOrder.assigned_agent_id)}</p>
                   )}
-                  {(!selectedOrder.assigned_agent_id && (selectedOrder.status === 'CONFIRMED' || selectedOrder.status === 'CREATED')) && (
+                  {(!selectedOrder.assigned_agent_id && ['CREATED','CONFIRMED','VERIFIED_READY','PACKED'].includes(selectedOrder.status)) && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     <select
                       value={assignAgentId}
