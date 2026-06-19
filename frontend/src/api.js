@@ -22,6 +22,7 @@ export const api = {
 
   dashboard: (range = '7d') => req(`/dashboard?range=${encodeURIComponent(range)}`),
   meenzyDashboard: () => req('/meenzy/dashboard/stats'),
+  meenzyAnalytics: () => req('/meenzy/analytics'),
   getMeenzySettings: () => req('/meenzy/dashboard/settings'),
   updateMeenzySetting: (key, value) => req('/meenzy/dashboard/settings', { method: 'POST', body: JSON.stringify({ key, value }) }),
   meenzyCampaignAudience: (item) => req(`/meenzy/campaigns/target-audience?item=${encodeURIComponent(item)}`),

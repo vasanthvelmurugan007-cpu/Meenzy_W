@@ -214,4 +214,37 @@ router.post('/meenzy/dashboard/settings', async (req, res) => {
   }
 });
 
+// Analytics Dashboard API
+router.get('/meenzy/analytics', async (req, res) => {
+  try {
+    // 1. Sales Trend (Last 7 Days)
+    const { rows: salesTrend } = await pool.query(`
+      SELECT 
+        DATE(created_at) as date, 
+        SUM(total_price) as total_revenue,
+        COUNT(id) as total_orders
+      FROM coexistence.ecosystem_orders
+      WHERE created_at >= NOW() - INTERVAL '7 days' AND status != 'CANCELLED'
+      GROUP BY DATE(created_at)
+      ORDER BY DATE(created_at) ASC
+    `);
+
+    // 2. Most Popular Items (All Time or Last 30 Days)
+    const { rows: popularItems } = await pool.query(`
+      SELECT 
+        product_name, 
+        SUM(quantity) as total_quantity
+      FROM coexistence.ecosystem_order_items
+      GROUP BY product_name
+      ORDER BY total_quantity DESC
+      LIMIT 10
+    `);
+
+    res.json({ salesTrend, popularItems });
+  } catch (err) {
+    console.error('[meenzy-analytics] Error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 module.exports = router;

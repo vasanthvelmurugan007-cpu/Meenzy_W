@@ -4,20 +4,31 @@ const { enqueueSend } = require('../queue/sendQueue');
 const { resolveAccount, insertPendingRow } = require('../services/messageSender');
 
 function startFeedbackCron() {
-  // Run every 15 minutes
-  cron.schedule('*/15 * * * *', async () => {
+  // Run every 5 minutes
+  cron.schedule('*/5 * * * *', async () => {
     console.log('[feedback-cron] Running post-delivery feedback check...');
     try {
-      // Find orders that were delivered more than 2 hours ago and haven't sent feedback yet
+      // Find meenzy_preorders delivered more than 1 hour ago
       const { rows } = await pool.query(`
-        SELECT id, customer_phone, ordered_item
+        SELECT id, customer_phone, ordered_item, 'preorder' as type
         FROM coexistence.meenzy_preorders
         WHERE order_status = 'DELIVERED' 
-          AND created_at < NOW() - INTERVAL '2 hours'
+          AND created_at < NOW() - INTERVAL '1 hour'
           AND (feedback_sent = false OR feedback_sent IS NULL)
       `);
 
-      if (rows.length === 0) return;
+      // Find ecosystem_orders delivered more than 1 hour ago
+      const { rows: ecoRows } = await pool.query(`
+        SELECT id, user_phone as customer_phone, 'Your Seafood Order' as ordered_item, 'ecosystem' as type
+        FROM coexistence.ecosystem_orders
+        WHERE status = 'DELIVERED' 
+          AND updated_at < NOW() - INTERVAL '1 hour'
+          AND (feedback_sent = false OR feedback_sent IS NULL)
+      `);
+
+      const allRows = [...rows, ...ecoRows];
+
+      if (allRows.length === 0) return;
 
       const { account, error } = await resolveAccount({});
       if (error || !account) {
@@ -25,7 +36,7 @@ function startFeedbackCron() {
         return;
       }
 
-      for (const row of rows) {
+      for (const row of allRows) {
         const payload = {
           type: "interactive",
           interactive: {
@@ -51,7 +62,11 @@ function startFeedbackCron() {
         });
         
         // Mark feedback as sent
-        await pool.query(`UPDATE coexistence.meenzy_preorders SET feedback_sent = true WHERE id = $1`, [row.id]);
+        if (row.type === 'preorder') {
+          await pool.query(`UPDATE coexistence.meenzy_preorders SET feedback_sent = true WHERE id = $1`, [row.id]);
+        } else {
+          await pool.query(`UPDATE coexistence.ecosystem_orders SET feedback_sent = true WHERE id = $1`, [row.id]);
+        }
         
         console.log(`[feedback-cron] Sent feedback request for order ${row.id} to: ${row.customer_phone}`);
       }

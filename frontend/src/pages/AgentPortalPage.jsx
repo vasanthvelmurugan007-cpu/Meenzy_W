@@ -645,7 +645,21 @@ export default function AgentPortalPage() {
         </div>
 
         {/* Dynamic MapLibre Map */}
-        <div style={{ background: '#fff', borderRadius: 16, overflow: 'hidden', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', marginBottom: 24, border: '1px solid #e5e7eb', height: 400, position: 'relative' }}>
+        <div style={{ 
+          background: '#fff', 
+          borderRadius: isDriveMode ? 0 : 16, 
+          overflow: 'hidden', 
+          boxShadow: '0 4px 6px rgba(0,0,0,0.05)', 
+          marginBottom: isDriveMode ? 0 : 24, 
+          border: '1px solid #e5e7eb', 
+          height: isDriveMode ? '100vh' : 400, 
+          position: isDriveMode ? 'fixed' : 'relative',
+          top: isDriveMode ? 0 : 'auto',
+          left: isDriveMode ? 0 : 'auto',
+          right: isDriveMode ? 0 : 'auto',
+          bottom: isDriveMode ? 0 : 'auto',
+          zIndex: isDriveMode ? 9999 : 1
+        }}>
           
           {/* Turn-by-Turn Instruction Banner */}
           {currentInstruction && (
