@@ -475,6 +475,35 @@ router.put('/meenzy/preorders/:id/assign', async (req, res) => {
       }
     }
 
+    // 4. Notify the assigned agent via WhatsApp
+    if (driver_id) {
+      try {
+        const agentRes = await pool.query(
+          `SELECT name, phone FROM coexistence.meenzy_delivery_agents WHERE id = $1`,
+          [driver_id]
+        );
+        if (agentRes.rows.length > 0) {
+          const agent = agentRes.rows[0];
+          if (agent.phone) {
+            const { resolveAccount, insertPendingRow } = require('../services/messageSender');
+            const { enqueueSend } = require('../queue/sendQueue');
+            const { account, error } = await resolveAccount({});
+            if (!error && account) {
+              const agentPhone = String(agent.phone).replace(/\D/g, '');
+              const preResDetails = preRes.rows[0] || {};
+              const portalUrl = `${process.env.CORS_ORIGIN || 'https://meenzy-frontend.onrender.com'}/#/agent-portal`;
+              const msg = `🚚 *New Preorder Delivery Assigned!*\n\nYou have been assigned a new delivery for: ${preResDetails.quantity || ''}kg ${preResDetails.ordered_item || 'item'}.\n\nPlease open your Agent Portal to view details:\n${portalUrl}`;
+              
+              const localId = await insertPendingRow({ account, toNumber: agentPhone, messageType: 'text', messageBody: msg });
+              await enqueueSend({ kind: 'text', accountId: account.id, to: agentPhone, localMessageId: localId, payload: { body: msg, previewUrl: false } });
+            }
+          }
+        }
+      } catch (notifyErr) {
+        console.error('[meenzy-assign-preorder] Notification error:', notifyErr.message);
+      }
+    }
+
     res.json({ ok: true, updated: rowCount });
   } catch (err) {
     console.error('[meenzy-assign-preorder] Error:', err.message);
