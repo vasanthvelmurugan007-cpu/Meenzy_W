@@ -3,6 +3,31 @@ const { insertPendingRow } = require('../services/messageSender');
 const { enqueueSend } = require('../queue/sendQueue');
 const { getPriceForExtractedItem, getCutOptionsForExtractedItem } = require('../catalogParser');
 const { createPaymentLink } = require('../services/razorpayService');
+const { getProductId } = require('../services/wixProductMap');
+const { createWixCartLink } = require('../services/wixCartService');
+
+// Helper to resolve cut options to specific Wix product IDs
+function resolveWixProductId(itemName, cutStyle) {
+  if (!itemName) return null;
+  
+  let resolvedName = itemName;
+  if (cutStyle) {
+    resolvedName = `${itemName} ${cutStyle}`;
+  }
+  
+  let wixId = getProductId(resolvedName);
+  if (!wixId && cutStyle) {
+    let standardFish = itemName.toLowerCase();
+    if (standardFish === 'vanjaram') standardFish = 'seer fish';
+    wixId = getProductId(`${standardFish} ${cutStyle}`);
+  }
+  
+  if (!wixId) {
+    wixId = getProductId(itemName);
+  }
+  
+  return wixId;
+}
 
 // Start the conversational order flow
 async function startNativeOrderFlow(whatsappId, account, items) {
@@ -109,6 +134,30 @@ async function generatePaymentAndSend(whatsappId, account, items, address) {
   const totalAmount = items.reduce((sum, item) => sum + (item.qty * item.pricePerKg), 0);
   const orderId = 'ORD-' + Math.floor(100000 + Math.random() * 900000);
 
+  // Generate Wix Cart Link
+  const wixItems = [];
+  for (const item of items) {
+    const wixId = resolveWixProductId(item.name, item.selectedCut);
+    if (wixId) {
+      wixItems.push({ productId: wixId, quantity: item.qty });
+    }
+  }
+
+  let wixCartUrl = null;
+  if (wixItems.length > 0) {
+    try {
+      const wixCartRes = await createWixCartLink({
+        phone: String(whatsappId).replace(/\D/g, ''),
+        items: wixItems
+      });
+      if (wixCartRes.ok) {
+        wixCartUrl = wixCartRes.cartUrl;
+      }
+    } catch (err) {
+      console.error('[nativeOrderEngine] Wix cart link generation failed:', err.message);
+    }
+  }
+
   // Generate Razorpay Link
   const paymentLinkResponse = await createPaymentLink({
     amount: totalAmount,
@@ -140,7 +189,12 @@ async function generatePaymentAndSend(whatsappId, account, items, address) {
       
       await client.query('COMMIT');
       
-      const msg = `💳 *Complete Your Payment*\n\nTap the link below to pay securely:\n${paymentLinkResponse.short_url}\n\n_Your order will be confirmed automatically after payment._`;
+      let msg = `💳 *Complete Your Payment*\n\n`;
+      if (wixCartUrl) {
+        msg += `🛒 *Review your cart on our website:*\n🔗 ${wixCartUrl}\n\n`;
+      }
+      msg += `Tap the link below to pay securely:\n🔗 ${paymentLinkResponse.short_url}\n\n_Your order will be confirmed automatically after payment._`;
+      
       const localId = await insertPendingRow({ account, toNumber: whatsappId, messageType: 'text', messageBody: 'Payment Link' });
       await enqueueSend({ kind: 'text', accountId: account.id, to: String(whatsappId).replace(/\D/g, ''), localMessageId: localId, payload: { body: msg, previewUrl: true } });
       
