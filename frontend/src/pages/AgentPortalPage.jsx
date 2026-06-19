@@ -874,7 +874,9 @@ export default function AgentPortalPage() {
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <CreditCard size={20} color={order.payment_status === 'PAID' ? '#10b981' : (order.payment_status === 'COLLECTED' ? '#10b981' : '#f59e0b')} />
-                    <span style={{ fontWeight: 700, color: theme.text }}>Payment</span>
+                    <span style={{ fontWeight: 700, color: theme.text }}>
+                      Payment {order.payment_status === 'COD' && <span style={{ color: '#ef4444' }}>(COD)</span>}
+                    </span>
                   </div>
                   {order.payment_status === 'PAID' ? (
                     <div style={{ padding: '6px 12px', borderRadius: 6, fontSize: 12, fontWeight: 700, background: '#dcfce7', color: '#166534', border: '1px solid #bbf7d0' }}>
@@ -889,7 +891,7 @@ export default function AgentPortalPage() {
                         color: order.payment_status === 'COLLECTED' ? '#fff' : (isDarkMode ? '#fcd34d' : '#92400e'),
                       }}
                     >
-                      {order.payment_status === 'COLLECTED' ? '✓ COLLECT CASH' : 'MARK COLLECTED'}
+                      {order.payment_status === 'COLLECTED' ? '✓ COLLECTED CASH' : (order.payment_status === 'COD' ? 'COLLECT CASH (COD)' : 'MARK COLLECTED')}
                     </button>
                   )}
                 </div>
