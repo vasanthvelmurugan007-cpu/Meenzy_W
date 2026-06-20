@@ -44,8 +44,11 @@ async function startNativeOrderFlow(whatsappId, account, items) {
     `, [whatsappId, JSON.stringify(stateContext)]);
     await client.query('COMMIT');
     
-    // Always auto-select the first match, skipping the options menu
-    await handleProductSelection(whatsappId, account, 0);
+    if (matches.length > 1) {
+      await askForProduct(whatsappId, account, requestedItem, matches);
+    } else {
+      await handleProductSelection(whatsappId, account, 0);
+    }
 
   } catch (err) {
     await client.query('ROLLBACK');
@@ -53,6 +56,28 @@ async function startNativeOrderFlow(whatsappId, account, items) {
   } finally {
     client.release();
   }
+}
+
+async function askForProduct(whatsappId, account, requestedItem, matches) {
+  const text = `We found a few options for *${requestedItem}*. Which one would you like?`;
+  
+  const rows = matches.slice(0, 10).map((m, idx) => ({
+    id: `C_PROD:${idx}`,
+    title: m.name.substring(0, 24),
+    description: `₹${m.pricePerKg} per Kg`
+  }));
+
+  const payload = {
+    type: "list",
+    body: { text },
+    action: {
+      button: "View Options",
+      sections: [{ title: "Available Variants", rows }]
+    }
+  };
+
+  const localId = await insertPendingRow({ account, toNumber: whatsappId, messageType: 'interactive', messageBody: 'Select Product Variant' });
+  await enqueueSend({ kind: 'interactive', accountId: account.id, to: String(whatsappId).replace(/\D/g, ''), localMessageId: localId, payload: { interactive: payload } });
 }
 
 async function handleProductSelection(whatsappId, account, matchIndex) {
@@ -438,6 +463,7 @@ async function handleNativeInteraction(whatsappId, account, cart, incomingPayloa
 
 module.exports = {
   startNativeOrderFlow,
+  askForProduct,
   handleProductSelection,
   handleCutSelection,
   handleQuantitySelection,
