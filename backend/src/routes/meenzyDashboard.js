@@ -116,8 +116,8 @@ router.get('/meenzy/dashboard/forecast', async (req, res) => {
 
     const dataString = rows.map(r => `${r.product_name}: ${r.total_quantity}kg (across ${r.order_count} orders)`).join('\n');
 
-    const apiKey = process.env.OPENROUTER_API_KEY || process.env.GEMINI_API_KEY;
-    if (!apiKey) return res.status(500).json({ error: 'AI API Key missing' });
+    const apiKey = process.env.GROQ_API_KEY;
+    if (!apiKey) return res.status(500).json({ error: 'Groq API Key missing' });
 
     const prompt = `You are an expert seafood demand forecaster for Meenzy Fresh Seafood in Kasimedu.
 Based on our sales data from the last 14 days, predict exactly what we need to buy from the harbor tomorrow morning to fulfill demand without wasting inventory.
@@ -126,15 +126,14 @@ ${dataString}
 
 Give a concise, bulleted list of recommended purchase quantities. Keep it professional, short, and highly actionable.`;
 
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${apiKey}`,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        "model": "google/gemma-4-31b-it:free",
-        "max_tokens": 500,
+        "model": "llama3-70b-8192",
         "messages": [{ "role": "user", "content": prompt }]
       })
     });
