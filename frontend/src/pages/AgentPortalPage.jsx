@@ -483,6 +483,11 @@ export default function AgentPortalPage() {
         setCurrentInstruction(firstStep.bannerInstructions?.length ? firstStep.bannerInstructions[0].primary.text : firstStep.maneuver.instruction);
       }
 
+      if (route.legs[0].steps && route.legs[0].steps.length > 0) {
+        const firstStep = route.legs[0].steps[0];
+        setCurrentInstruction(firstStep.instructions || firstStep.maneuver?.instruction || 'Drive to destination');
+      }
+
       let validOrderIndex = 0;
       const validOrders = orders.filter(o => o.lat && o.lng);
 
@@ -751,6 +756,7 @@ export default function AgentPortalPage() {
           >
             <Navigation size={14} /> {isDriveMode ? 'Drive Mode ON' : 'Start Drive Mode'}
           </button>
+          
           <Map
             ref={mapRef}
             mapLib={maplibregl}
@@ -773,6 +779,7 @@ export default function AgentPortalPage() {
                 <Source key={`route-source-${originalIndex}`} id={`route-${originalIndex}`} type="geojson" data={{ type: 'Feature', properties: {}, geometry: route.geometry }}>
                   <Layer 
                     id={`route-line-${originalIndex}`}
+                    source={`route-${originalIndex}`}
                     type="line"
                     layout={{
                       'line-join': 'round',
