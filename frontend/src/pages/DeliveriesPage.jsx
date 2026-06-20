@@ -440,10 +440,10 @@ export default function DeliveriesPage() {
                 lat = 13.0827 + (radius * Math.cos(angle));
                 lng = 80.2707 + (radius * Math.sin(angle));
               }
-              const isUnassigned = ['CREATED','CONFIRMED','VERIFIED_READY','PACKED'].includes(order.status) && !order.assigned_agent_id;
               const isDelivered = order.status === 'DELIVERED';
               const isAssigned = !!order.assigned_agent_id && !isDelivered && order.status !== 'CANCELLED' && order.status !== 'DELIVERY_FAILED_DISPUTED';
               const isIssue = order.status === 'DELIVERY_FAILED_DISPUTED' || order.status === 'CANCELLED';
+              const isUnassigned = !isAssigned && !isDelivered && !isIssue;
               
               let bgColor = '#ef4444'; // Red (Unassigned)
               if (selectedOrderIds.has(order.id)) bgColor = '#3b82f6'; // Blue (Selected)
@@ -456,7 +456,7 @@ export default function DeliveriesPage() {
                 <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', opacity: isDelivered ? 0.7 : 1 }}>
                   {isUnassigned && (
                     <div style={{ 
-                      position: 'absolute', top: -8, right: -8, zIndex: 10, background: '#fff', borderRadius: '50%', padding: 2, display: 'flex', boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+                      position: 'absolute', top: -12, right: -12, zIndex: 10, background: '#fff', borderRadius: '4px', padding: '4px', display: 'flex', boxShadow: '0 2px 5px rgba(0,0,0,0.4)', border: '1px solid #d1d5db'
                     }}>
                       <input 
                         type="checkbox"
@@ -466,7 +466,7 @@ export default function DeliveriesPage() {
                           toggleOrderSelection(order.id);
                         }}
                         onClick={e => e.stopPropagation()}
-                        style={{ cursor: 'pointer', margin: 0, width: 14, height: 14 }}
+                        style={{ cursor: 'pointer', margin: 0, width: 18, height: 18, accentColor: '#2563eb' }}
                       />
                     </div>
                   )}
