@@ -64,5 +64,5 @@ async function testOlaMapsGeocoding(address) {
 }
 
 // Test with a complex Indian address
-const testAddress = "Phoenix Marketcity, Mahadevapura, Bengaluru, Karnataka 560048";
+const testAddress = "No 16 A, Rani Velu Nachiyar St, Sri Kamatchi Amman Nagar Extension, Potheri East, Chengalpattu District, Tamil Nadu - 603203, chennai, Tamil Nadu, 603203, India";
 testOlaMapsGeocoding(testAddress);

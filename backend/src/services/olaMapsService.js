@@ -2,8 +2,8 @@ const axios = require('axios');
 
 class OlaMapsService {
   constructor() {
-    this.clientId = process.env.OLA_MAPS_CLIENT_ID;
-    this.clientSecret = process.env.OLA_MAPS_CLIENT_SECRET;
+    this.clientId = process.env.OLA_MAPS_CLIENT_ID || 'd474c47d-b72f-4312-851f-0cc64d93080e';
+    this.clientSecret = process.env.OLA_MAPS_CLIENT_SECRET || 'ba216658050a4325b5dc132e0c9d81be';
     // Fallback to API Key if client ID is missing
     this.apiKey = process.env.OLA_MAPS_API_KEY;
     this.token = null;
