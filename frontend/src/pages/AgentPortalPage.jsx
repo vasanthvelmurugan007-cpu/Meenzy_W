@@ -773,7 +773,6 @@ export default function AgentPortalPage() {
                 <Source key={`route-source-${originalIndex}`} id={`route-${originalIndex}`} type="geojson" data={{ type: 'Feature', properties: {}, geometry: route.geometry }}>
                   <Layer 
                     id={`route-line-${originalIndex}`}
-                    source={`route-${originalIndex}`}
                     type="line"
                     layout={{
                       'line-join': 'round',

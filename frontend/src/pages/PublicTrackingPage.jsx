@@ -133,7 +133,6 @@ export default function PublicTrackingPage() {
               <Source id="route-source" type="geojson" data={{ type: 'Feature', properties: {}, geometry: routeGeoJSON }}>
                 <Layer 
                   id="route-layer" 
-                  source="route-source"
                   type="line" 
                   layout={{ 'line-join': 'round', 'line-cap': 'round' }} 
                   paint={{ 'line-color': '#3b82f6', 'line-width': 4 }} 
