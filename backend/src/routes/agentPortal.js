@@ -362,43 +362,34 @@ router.post('/:agentId/optimize-route', verifyAgent, async (req, res) => {
     const startLat = currentLat ? parseFloat(currentLat) : (validOrders.length > 0 ? parseFloat(validOrders[0].lat) : 13.123565);
     const startLng = currentLng ? parseFloat(currentLng) : (validOrders.length > 0 ? parseFloat(validOrders[0].lng) : 80.291771);
 
-    // Mathematical Nearest Neighbor (Greedy) Algorithm
-    // This perfectly satisfies the rule: "Find closest to agent, then closest to that point, etc."
-    let unvisited = [...validOrders];
-    const finalOptimized = [];
+    const olaMapsService = require('../services/olaMapsService');
     
-    let currentPoint = { lat: startLat, lng: startLng };
+    // Construct coordinate array starting with the agent's current location
+    const coordinates = [
+      { lat: startLat, lng: startLng },
+      ...validOrders.map(o => ({ lat: parseFloat(o.lat), lng: parseFloat(o.lng) }))
+    ];
 
-    while (unvisited.length > 0) {
-      let nearestIdx = -1;
-      let minDistance = Infinity;
-
-      for (let i = 0; i < unvisited.length; i++) {
-        const order = unvisited[i];
-        // Squared Euclidean distance is perfectly sufficient for relative proximity comparison
-        const dist = Math.pow(currentPoint.lat - parseFloat(order.lat), 2) + Math.pow(currentPoint.lng - parseFloat(order.lng), 2);
+    let finalSequence = [];
+    try {
+      // Get optimized waypoint indices from Ola Maps
+      const waypointOrder = await olaMapsService.optimizeRoute(coordinates);
+      
+      // Ola Maps returns indices based on the provided coordinates array.
+      // Index 0 is the agent's start location. We filter it out and map the rest to order IDs.
+      finalSequence = waypointOrder
+        .filter(idx => idx > 0) // Skip start location
+        .map(idx => validOrders[idx - 1].id);
         
-        if (dist < minDistance) {
-          minDistance = dist;
-          nearestIdx = i;
-        }
-      }
-
-      // Add the nearest order to the sequence
-      const nearestOrder = unvisited[nearestIdx];
-      finalOptimized.push(nearestOrder.id);
-      
-      // Update current point to this order's location for the next iteration
-      currentPoint = { lat: parseFloat(nearestOrder.lat), lng: parseFloat(nearestOrder.lng) };
-      
-      // Remove from unvisited list
-      unvisited.splice(nearestIdx, 1);
+      finalSequence = [...finalSequence, ...missingOrders];
+    } catch (apiErr) {
+      console.warn('[OlaMaps Optimize Warning] Falling back to sequence order due to API failure', apiErr.message);
+      finalSequence = [...validOrders.map(o => o.id), ...missingOrders];
     }
 
-    const finalSequence = [...finalOptimized, ...missingOrders];
     res.json({ ok: true, sequence: finalSequence });
   } catch (err) {
-    console.error('[Mapbox Optimize Error]', err.message);
+    console.error('[Ola Maps Optimize Error]', err.message);
     // Fallback to unoptimized sequence if something crashes
     res.json({ ok: true, sequence: orders.map(o => o.id) });
   }

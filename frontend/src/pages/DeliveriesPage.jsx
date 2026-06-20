@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../api';
 import { AlertTriangle, CheckCircle, Package, RefreshCw, XCircle, Clock, MapPin, Navigation, Sparkles, Trash2 } from 'lucide-react';
+import maplibregl from 'maplibre-gl';
+import 'maplibre-gl/dist/maplibre-gl.css';
 import Map, { Marker, NavigationControl, Popup, Source, Layer } from 'react-map-gl';
-import 'mapbox-gl/dist/mapbox-gl.css';
 import { C, FONT } from '../constants';
 
 const PINCODE_ZONES = {
@@ -387,10 +388,16 @@ export default function DeliveriesPage() {
 
         <div style={{ height: 400, borderRadius: 8, overflow: 'hidden', position: 'relative', border: `1px solid ${C.border}` }}>
           <Map
+            mapLib={maplibregl}
             initialViewState={viewState}
             onLoad={e => e.target.resize()}
-            mapStyle={showHeatmap ? 'mapbox://styles/mapbox/dark-v11' : 'mapbox://styles/mapbox/streets-v12'}
-            mapboxAccessToken={import.meta.env.VITE_MAPBOX_TOKEN}
+            mapStyle={`https://api.olamaps.io/tiles/vector/v1/styles/default-light-standard/style.json`}
+            transformRequest={(url, resourceType) => {
+              if (url.includes('api.olamaps.io')) {
+                const olaToken = import.meta.env.VITE_OLA_MAPS_KEY || import.meta.env.VITE_MAPBOX_TOKEN;
+                return { url: `${url}${url.includes('?') ? '&' : '?'}api_key=${olaToken}` };
+              }
+            }}
             style={{ width: '100%', height: '100%' }}
           >
             <NavigationControl position="top-right" />

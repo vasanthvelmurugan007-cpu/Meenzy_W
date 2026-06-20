@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../api';
 import { C, FONT } from '../constants';
 import { TrendingUp, Award, Map as MapIcon, BarChart3, AlertCircle } from 'lucide-react';
+import maplibregl from 'maplibre-gl';
+import 'maplibre-gl/dist/maplibre-gl.css';
 import Map, { NavigationControl, Source, Layer } from 'react-map-gl';
-import 'mapbox-gl/dist/mapbox-gl.css';
 
 export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true);
@@ -155,9 +156,15 @@ export default function AnalyticsPage() {
           <div style={{ height: 500, borderRadius: 12, overflow: 'hidden', border: `1px solid ${C.border}` }}>
             {heatmapData ? (
               <Map
+                mapLib={maplibregl}
                 initialViewState={{ longitude: 80.2707, latitude: 13.0827, zoom: 11 }}
-                mapStyle='mapbox://styles/mapbox/dark-v11'
-                mapboxAccessToken={import.meta.env.VITE_MAPBOX_TOKEN}
+                mapStyle={`https://api.olamaps.io/tiles/vector/v1/styles/default-light-standard/style.json`}
+                transformRequest={(url, resourceType) => {
+                  if (url.includes('api.olamaps.io')) {
+                    const olaToken = import.meta.env.VITE_OLA_MAPS_KEY || import.meta.env.VITE_MAPBOX_TOKEN;
+                    return { url: `${url}${url.includes('?') ? '&' : '?'}api_key=${olaToken}` };
+                  }
+                }}
               >
                 <NavigationControl position="top-right" />
                 <Source type="geojson" data={heatmapData}>

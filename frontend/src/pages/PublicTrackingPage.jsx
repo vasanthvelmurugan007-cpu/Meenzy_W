@@ -1,8 +1,26 @@
 import React, { useState, useEffect } from 'react';
 
+import maplibregl from 'maplibre-gl';
+import 'maplibre-gl/dist/maplibre-gl.css';
 import Map, { Marker, NavigationControl, Source, Layer } from 'react-map-gl';
-import 'mapbox-gl/dist/mapbox-gl.css';
 import { Package, Navigation, Phone, CheckCircle, Clock, Check, Map as MapIcon, MapPin } from 'lucide-react';
+
+// Helper to decode Google Polyline from Ola Maps
+function decodePolyline(str, precision = 5) {
+  let index = 0, lat = 0, lng = 0, coordinates = [], shift = 0, result = 0, byte = null;
+  let latitude_change, longitude_change, factor = Math.pow(10, precision);
+  while (index < str.length) {
+    byte = null; shift = 0; result = 0;
+    do { byte = str.charCodeAt(index++) - 63; result |= (byte & 0x1f) << shift; shift += 5; } while (byte >= 0x20);
+    latitude_change = ((result & 1) ? ~(result >> 1) : (result >> 1));
+    shift = result = 0;
+    do { byte = str.charCodeAt(index++) - 63; result |= (byte & 0x1f) << shift; shift += 5; } while (byte >= 0x20);
+    longitude_change = ((result & 1) ? ~(result >> 1) : (result >> 1));
+    lat += latitude_change; lng += longitude_change;
+    coordinates.push([lng / factor, lat / factor]);
+  }
+  return coordinates;
+}
 
 const FONT = "'Inter', sans-serif";
 
@@ -18,7 +36,7 @@ export default function PublicTrackingPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [routeGeoJSON, setRouteGeoJSON] = useState(null);
-  const mapToken = import.meta.env.VITE_MAPBOX_TOKEN;
+  const mapToken = import.meta.env.VITE_OLA_MAPS_KEY || import.meta.env.VITE_MAPBOX_TOKEN;
 
   useEffect(() => {
     fetchTrackingData();
@@ -49,13 +67,17 @@ export default function PublicTrackingPage() {
   // Fetch route when coordinates are available
   useEffect(() => {
     if (orderData && orderData.agent?.lat && orderData.agent?.lng && orderData.lat && orderData.lng && mapToken) {
-      fetch(
-        `https://api.mapbox.com/directions/v5/mapbox/driving/${orderData.agent.lng},${orderData.agent.lat};${orderData.lng},${orderData.lat}?geometries=geojson&access_token=${mapToken}`
-      )
+      const origin = `${orderData.agent.lat},${orderData.agent.lng}`;
+      const destination = `${orderData.lat},${orderData.lng}`;
+      
+      fetch(`https://api.olamaps.io/routing/v1/directions?origin=${origin}&destination=${destination}&api_key=${mapToken}`, { method: 'POST' })
         .then(r => r.json())
         .then(data => {
-          if (data.routes && data.routes.length > 0) {
-            setRouteGeoJSON(data.routes[0].geometry);
+          if (data.status === 'SUCCESS' && data.routes && data.routes.length > 0) {
+            setRouteGeoJSON({
+              type: 'LineString',
+              coordinates: decodePolyline(data.routes[0].overview_polyline)
+            });
           }
         })
         .catch(console.error);
@@ -93,13 +115,18 @@ export default function PublicTrackingPage() {
       <div style={{ flex: 1, position: 'relative', background: '#e5e7eb', minHeight: 300 }}>
         {canRenderMap ? (
           <Map
+            mapLib={maplibregl}
             initialViewState={{
               longitude: parseFloat(orderData.agent.lng),
               latitude: parseFloat(orderData.agent.lat),
               zoom: 14
             }}
-            mapStyle={`mapbox://styles/mapbox/streets-v12`}
-            mapboxAccessToken={mapToken}
+            mapStyle={`https://api.olamaps.io/tiles/vector/v1/styles/default-light-standard/style.json`}
+            transformRequest={(url, resourceType) => {
+              if (url.includes('api.olamaps.io')) {
+                return { url: `${url}${url.includes('?') ? '&' : '?'}api_key=${mapToken}` };
+              }
+            }}
           >
             <NavigationControl position="top-right" />
             

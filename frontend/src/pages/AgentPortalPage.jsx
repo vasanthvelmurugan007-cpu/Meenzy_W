@@ -1,8 +1,26 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { api } from '../api';
 import { Package, CheckCircle, MapPin, Phone, CreditCard, Clock, LogIn, Navigation, ArrowRight, Sparkles, Moon, Sun, Camera, Trash2 } from 'lucide-react';
+import maplibregl from 'maplibre-gl';
+import 'maplibre-gl/dist/maplibre-gl.css';
 import Map, { Marker, NavigationControl, Source, Layer } from 'react-map-gl';
-import 'mapbox-gl/dist/mapbox-gl.css';
+
+// Helper to decode Google Polyline from Ola Maps
+function decodePolyline(str, precision = 5) {
+  let index = 0, lat = 0, lng = 0, coordinates = [], shift = 0, result = 0, byte = null;
+  let latitude_change, longitude_change, factor = Math.pow(10, precision);
+  while (index < str.length) {
+    byte = null; shift = 0; result = 0;
+    do { byte = str.charCodeAt(index++) - 63; result |= (byte & 0x1f) << shift; shift += 5; } while (byte >= 0x20);
+    latitude_change = ((result & 1) ? ~(result >> 1) : (result >> 1));
+    shift = result = 0;
+    do { byte = str.charCodeAt(index++) - 63; result |= (byte & 0x1f) << shift; shift += 5; } while (byte >= 0x20);
+    longitude_change = ((result & 1) ? ~(result >> 1) : (result >> 1));
+    lat += latitude_change; lng += longitude_change;
+    coordinates.push([lng / factor, lat / factor]);
+  }
+  return coordinates;
+}
 import { C, FONT } from '../constants';
 import AgentLogin from './AgentLogin';
 import AgentRegister from './AgentRegister';
@@ -107,10 +125,15 @@ export default function AgentPortalPage() {
     if (!searchQuery) return;
     setSearching(true);
     try {
-      const mapboxToken = import.meta.env.VITE_MAPBOX_TOKEN;
-      const res = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(searchQuery)}.json?access_token=${mapboxToken}&limit=5`);
+      const olaMapsToken = import.meta.env.VITE_OLA_MAPS_KEY || import.meta.env.VITE_MAPBOX_TOKEN;
+      const res = await fetch(`https://api.olamaps.io/places/v1/geocode?address=${encodeURIComponent(searchQuery)}&api_key=${olaMapsToken}`);
       const data = await res.json();
-      setSearchResults(data.features || []);
+      const features = (data.geocodingResults || []).map(p => ({
+        id: p.place_id || Math.random().toString(),
+        place_name: p.formatted_address,
+        center: [p.geometry.location.lng, p.geometry.location.lat]
+      }));
+      setSearchResults(features);
     } catch (err) {
       console.error('Geocoding failed', err);
     } finally {
@@ -368,16 +391,27 @@ export default function AgentPortalPage() {
       if (stops.length < 2) return; // Need at least a start and an end
 
       try {
-        const coordString = stops.join(';');
-        const mapboxToken = import.meta.env.VITE_MAPBOX_TOKEN;
-        // Feature 1, 5 & Alternative Routes: driving-traffic + instructions + alternatives
-        const res = await fetch(`https://api.mapbox.com/directions/v5/mapbox/driving-traffic/${coordString}?alternatives=true&overview=full&geometries=geojson&steps=true&banner_instructions=true&access_token=${mapboxToken}`);
+        const olaMapsToken = import.meta.env.VITE_OLA_MAPS_KEY || import.meta.env.VITE_MAPBOX_TOKEN;
+        const origin = stops[0].split(',').reverse().join(','); // lat,lng
+        const destination = stops[stops.length-1].split(',').reverse().join(',');
+        const waypoints = stops.slice(1, -1).map(s => s.split(',').reverse().join(',')).join('|');
+        
+        const url = `https://api.olamaps.io/routing/v1/directions?origin=${origin}&destination=${destination}${waypoints ? `&waypoints=${waypoints}` : ''}&api_key=${olaMapsToken}&steps=true&alternatives=true`;
+        
+        const res = await fetch(url, { method: 'POST', headers: { 'X-Request-Id': Date.now().toString() } });
         const data = await res.json();
         
-        if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
-          setAllRoutes(data.routes);
+        if (data.status === 'SUCCESS' && data.routes && data.routes.length > 0) {
+          // Normalize Ola Maps response to match our expected format
+          const normalizedRoutes = data.routes.map(r => ({
+            geometry: { coordinates: decodePolyline(r.overview_polyline) },
+            legs: r.legs || [],
+            duration: (r.legs || []).reduce((acc, l) => acc + l.duration, 0)
+          }));
+          
+          setAllRoutes(normalizedRoutes);
           setSelectedRouteIndex(0);
-          const route = data.routes[0];
+          const route = normalizedRoutes[0];
 
           // Fit map bounds if not in drive mode
           if (!isDriveModeRef.current) {
@@ -701,9 +735,15 @@ export default function AgentPortalPage() {
           </button>
           <Map
             ref={mapRef}
+            mapLib={maplibregl}
             initialViewState={viewState}
-            mapStyle={`mapbox://styles/mapbox/streets-v12`}
-            mapboxAccessToken={import.meta.env.VITE_MAPBOX_TOKEN}
+            mapStyle={`https://api.olamaps.io/tiles/vector/v1/styles/default-light-standard/style.json`}
+            transformRequest={(url, resourceType) => {
+              if (url.includes('api.olamaps.io')) {
+                const olaToken = import.meta.env.VITE_OLA_MAPS_KEY || import.meta.env.VITE_MAPBOX_TOKEN;
+                return { url: `${url}${url.includes('?') ? '&' : '?'}api_key=${olaToken}` };
+              }
+            }}
           >
             <NavigationControl position="bottom-right" />
             
