@@ -9,17 +9,14 @@ const router = express.Router();
  */
 router.get('/products', async (req, res) => {
   try {
-    const { rows } = await pool.query(`
-      SELECT name, price, bulk_discount_tier1_min_qty, bulk_discount_tier1_pct
-      FROM coexistence.ecosystem_products
-      WHERE is_active = true
-    `);
+    const { fetchCatalogProducts } = require('../services/wixCatalogFetcher');
+    const catalog = await fetchCatalogProducts();
     
-    // Simulate bulk pricing if none exists
-    const b2bProducts = rows.map(p => ({
+    // Simulate bulk pricing for B2B based on retail catalog
+    const b2bProducts = catalog.map(p => ({
       name: p.name,
-      retail_price: parseFloat(p.price),
-      b2b_price: Math.floor(parseFloat(p.price) * 0.8), // 20% discount for B2B
+      retail_price: parseFloat(p.price) || 0,
+      b2b_price: Math.floor((parseFloat(p.price) || 0) * 0.8), // 20% discount for B2B
       min_qty: 10 // Minimum 10kg order
     }));
     

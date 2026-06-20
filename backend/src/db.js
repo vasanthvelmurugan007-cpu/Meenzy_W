@@ -37,9 +37,17 @@ pool.on('error', (err) => {
 // Automatically run simple migrations/schema checks
 pool.query(`
   ALTER TABLE coexistence.meenzy_preorders 
-  ADD COLUMN IF NOT EXISTS payment_status VARCHAR(50) DEFAULT 'UNKNOWN'
+  ADD COLUMN IF NOT EXISTS payment_status VARCHAR(50) DEFAULT 'UNKNOWN',
+  ADD COLUMN IF NOT EXISTS feedback_sent BOOLEAN DEFAULT false
 `).catch(err => {
-  console.log('[DB] Note: Could not add payment_status column (might already exist or permission error).', err.message);
+  console.log('[DB] Note: Could not add payment_status/feedback_sent column to preorders.', err.message);
+});
+
+pool.query(`
+  ALTER TABLE coexistence.ecosystem_orders 
+  ADD COLUMN IF NOT EXISTS feedback_sent BOOLEAN DEFAULT false
+`).catch(err => {
+  console.log('[DB] Note: Could not add feedback_sent column to orders.', err.message);
 });
 
 pool.query(`

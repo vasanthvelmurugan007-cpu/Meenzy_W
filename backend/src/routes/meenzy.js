@@ -73,7 +73,7 @@ async function sendMetaTextMessage(toNumber, text) {
  * Process inbound order/cart from Meta webhook
  */
 async function processCheckout(customerPhone, cartItems, catalogId) {
-  const { fetchCatalogProducts } = require('./webhook');
+  const { fetchCatalogProducts } = require('../services/wixCatalogFetcher');
   
   try {
     console.log(`[meenzy-checkout] Processing checkout for customer ${customerPhone}`);
@@ -179,7 +179,7 @@ async function confirmOrder(orderId, trackingNumber = null) {
     const order = orderRes.rows[0];
     
     // 2. Fetch live Wix products to calculate the correct price
-    const { fetchCatalogProducts } = require('./webhook');
+    const { fetchCatalogProducts } = require('../services/wixCatalogFetcher');
     const wixProducts = await fetchCatalogProducts();
     const product = wixProducts.find(p => p.name === order.ordered_item);
     const price = product ? parseFloat(product.price || 0) : 0;
@@ -1073,7 +1073,7 @@ router.get('/meenzy/batch-agent/context', async (req, res) => {
       quantity: parseFloat(row.total_quantity) || 0
     }));
 
-    const { fetchCatalogProducts } = require('./webhook');
+    const { fetchCatalogProducts } = require('../services/wixCatalogFetcher');
     const catalog = await fetchCatalogProducts();
 
     res.json({ ok: true, pendingDemand, catalog });
