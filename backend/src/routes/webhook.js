@@ -1048,7 +1048,7 @@ router.post('/webhook/whatsapp', async (req, res) => {
                  WHERE contact_number = $1
                `, [r.contact_number]);
                
-               const text = "I have paused automated responses. A human from our team will chat with you shortly! 🧑‍💼\n\nIf you need immediate assistance, you can directly message our support team here:\n👉 https://wa.me/918056272947\n\n(Type 'resume bot' anytime to wake me up)";
+               const text = "I have paused automated responses. A human from our team will chat with you shortly! 🧑‍💼\n\nIf you need immediate assistance, you can call or text our support team directly here:\n📞 +91 80562 72947\n👉 https://wa.me/918056272947\n\n(Type 'resume bot' anytime to wake me up)";
                const localId = await insertPendingRow({ account, toNumber: r.contact_number, messageType: 'text', messageBody: text });
                await enqueueSend({ kind: 'text', accountId: account.id, to: String(r.contact_number).replace(/\D/g, ''), localMessageId: localId, payload: { body: text, previewUrl: false } });
                r.__handled = true;
@@ -1439,7 +1439,7 @@ const { fetchCatalogProducts } = require('../services/wixCatalogFetcher');
                    const { enqueueSend } = require('../queue/sendQueue');
                    const { account } = await resolveAccount({});
                    if (account) {
-                     const text = "I have paused my automated responses. A human from our team will chat with you shortly! 🧑‍💼\n\nIf you need immediate assistance, you can directly message our support team here:\n👉 https://wa.me/918056272947\n\n(Type 'resume bot' anytime to wake me up)";
+                     const text = "I have paused my automated responses. A human from our team will chat with you shortly! 🧑‍💼\n\nIf you need immediate assistance, you can call or text our support team directly here:\n📞 +91 80562 72947\n👉 https://wa.me/918056272947\n\n(Type 'resume bot' anytime to wake me up)";
                      const localId = await insertPendingRow({ account, toNumber: r.contact_number, messageType: 'text', messageBody: text });
                      await enqueueSend({ kind: 'text', accountId: account.id, to: String(r.contact_number).replace(/\D/g, ''), localMessageId: localId, payload: { body: text, previewUrl: false } });
                    }
