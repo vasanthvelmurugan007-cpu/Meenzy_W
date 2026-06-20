@@ -22,6 +22,20 @@ function decodePolyline(str, precision = 5) {
   return coordinates;
 }
 
+// Calculate true bearing between two points
+function getBearing(startLat, startLng, destLat, destLng) {
+  const startLatRad = (startLat * Math.PI) / 180;
+  const startLngRad = (startLng * Math.PI) / 180;
+  const destLatRad = (destLat * Math.PI) / 180;
+  const destLngRad = (destLng * Math.PI) / 180;
+  
+  const y = Math.sin(destLngRad - startLngRad) * Math.cos(destLatRad);
+  const x = Math.cos(startLatRad) * Math.sin(destLatRad) - Math.sin(startLatRad) * Math.cos(destLatRad) * Math.cos(destLngRad - startLngRad);
+  let brng = Math.atan2(y, x);
+  brng = (brng * 180) / Math.PI;
+  return (brng + 360) % 360;
+}
+
 const FONT = "'Inter', sans-serif";
 
 export default function PublicTrackingPage() {
@@ -36,6 +50,13 @@ export default function PublicTrackingPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [routeGeoJSON, setRouteGeoJSON] = useState(null);
+  
+  const [etaText, setEtaText] = useState(null);
+  const [agentPos, setAgentPos] = useState(null);
+  const [agentBearing, setAgentBearing] = useState(0);
+  const [instructionsText, setInstructionsText] = useState('');
+  const [instructionsSaved, setInstructionsSaved] = useState(false);
+  
   const mapToken = import.meta.env.VITE_OLA_MAPS_KEY || import.meta.env.VITE_OLA_MAPS_API_KEY || import.meta.env.VITE_MAPBOX_TOKEN;
 
   useEffect(() => {
@@ -56,12 +77,29 @@ export default function PublicTrackingPage() {
       }
       const data = await res.json();
       setOrderData(data.order);
+      if (!agentPos && data.order?.delivery_instructions) {
+        setInstructionsText(data.order.delivery_instructions);
+      }
       if (!silent) setError(null);
     } catch (err) {
       if (!silent) setError('Failed to load tracking data. Please ensure you clicked the exact link from your SMS/WhatsApp.');
     } finally {
       if (!silent) setLoading(false);
     }
+  }
+
+  async function saveInstructions() {
+    try {
+      const res = await fetch(`/api/tracking/${orderId}/instructions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: phoneVerification, instructions: instructionsText })
+      });
+      if (res.ok) {
+        setInstructionsSaved(true);
+        setTimeout(() => setInstructionsSaved(false), 3000);
+      }
+    } catch(e) { console.error(e); }
   }
 
   // Fetch route when coordinates are available
@@ -82,11 +120,59 @@ export default function PublicTrackingPage() {
               type: 'LineString',
               coordinates: decodePolyline(data.routes[0].overview_polyline)
             });
+            
+            // Extract ETA and distance
+            if (data.routes[0].legs && data.routes[0].legs.length > 0) {
+              const leg = data.routes[0].legs[0];
+              if (leg.duration && leg.distance) {
+                const mins = Math.ceil(leg.duration / 60);
+                const distKm = (leg.distance / 1000).toFixed(1);
+                setEtaText(`Arriving in ~${mins} mins (${distKm} km)`);
+              }
+            }
           }
         })
         .catch(console.error);
     }
-  }, [orderData?.agent?.lat, orderData?.agent?.lng, orderData?.lat, orderData?.lng]);
+  }, [orderData?.lat, orderData?.lng]); // only re-fetch route if destination changes (save API calls)
+
+  // Smooth animation effect for agent position
+  useEffect(() => {
+    if (orderData && orderData.agent?.lat && orderData.agent?.lng) {
+      const targetLat = parseFloat(orderData.agent.lat);
+      const targetLng = parseFloat(orderData.agent.lng);
+      
+      if (!agentPos) {
+        setAgentPos({ lat: targetLat, lng: targetLng });
+      } else {
+        if (targetLat !== agentPos.lat || targetLng !== agentPos.lng) {
+          const bearing = getBearing(agentPos.lat, agentPos.lng, targetLat, targetLng);
+          setAgentBearing(bearing);
+          
+          const startTime = performance.now();
+          const duration = 2000;
+          const startLat = agentPos.lat;
+          const startLng = agentPos.lng;
+          
+          const animate = (currentTime) => {
+            const elapsed = currentTime - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            const ease = progress * (2 - progress); // easeOutQuad
+            
+            setAgentPos({
+              lat: startLat + (targetLat - startLat) * ease,
+              lng: startLng + (targetLng - startLng) * ease
+            });
+            
+            if (progress < 1) {
+              requestAnimationFrame(animate);
+            }
+          };
+          requestAnimationFrame(animate);
+        }
+      }
+    }
+  }, [orderData?.agent?.lat, orderData?.agent?.lng]);
 
   if (loading) return <div style={{ padding: 40, textAlign: 'center', fontFamily: FONT }}>Loading your live delivery status...</div>;
   if (error) return <div style={{ padding: 40, textAlign: 'center', fontFamily: FONT, color: 'red' }}>{error}</div>;
@@ -114,6 +200,13 @@ export default function PublicTrackingPage() {
           <Package size={14} /> Order #{(orderData.id || orderId || '').slice(-6)}
         </div>
       </div>
+      
+      {/* Live ETA Banner */}
+      {etaText && !isDelivered && isOutForDelivery && (
+        <div style={{ background: '#ecfdf5', color: '#047857', padding: '12px 20px', fontSize: 14, fontWeight: 700, textAlign: 'center', borderBottom: '1px solid #a7f3d0' }}>
+          {etaText}
+        </div>
+      )}
 
       {/* Map Section */}
       <div style={{ flex: 1, position: 'relative', background: '#e5e7eb', minHeight: 300 }}>
@@ -152,13 +245,15 @@ export default function PublicTrackingPage() {
             )}
             
             {/* Agent Marker */}
-            <Marker longitude={parseFloat(orderData.agent.lng)} latitude={parseFloat(orderData.agent.lat)} anchor="bottom">
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <div style={{ background: '#10b981', color: '#fff', width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.3)', border: '2px solid #fff' }}>
-                  <Navigation size={16} style={{ transform: 'rotate(45deg)' }} />
+            {agentPos && (
+              <Marker longitude={agentPos.lng} latitude={agentPos.lat} anchor="center">
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <div style={{ background: '#10b981', color: '#fff', width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.3)', border: '2px solid #fff', transform: `rotate(${agentBearing}deg)`, transition: 'transform 0.5s ease-out' }}>
+                    <Navigation size={16} style={{ transform: 'rotate(-45deg)' }} />
+                  </div>
                 </div>
-              </div>
-            </Marker>
+              </Marker>
+            )}
           </Map>
         ) : (
           <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', color: '#6b7280', padding: 20, textAlign: 'center' }}>
@@ -212,6 +307,38 @@ export default function PublicTrackingPage() {
             <div style={{ flex: 1 }}>
               <p style={{ margin: '0 0 2px 0', fontWeight: 700, fontSize: 15, color: '#1f2937' }}>{orderData.agent.name || 'Agent'}</p>
               <p style={{ margin: 0, fontSize: 12, color: '#6b7280' }}>{orderData.agent.vehicle || 'Delivery Partner'}</p>
+            </div>
+            {orderData.agent.phone && (
+              <div style={{ display: 'flex', gap: 8 }}>
+                <a href={`tel:${orderData.agent.phone}`} style={{ width: 36, height: 36, borderRadius: '50%', background: '#ef4444', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none' }}>
+                  <Phone size={16} />
+                </a>
+                <a href={`https://wa.me/${orderData.agent.phone.replace(/\D/g, '')}?text=Hi! I'm calling regarding my Meenzy delivery.`} target="_blank" rel="noopener noreferrer" style={{ width: 36, height: 36, borderRadius: '50%', background: '#25D366', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none' }}>
+                  <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+                </a>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Delivery Instructions Input */}
+        {!isDelivered && (
+          <div style={{ marginBottom: 20 }}>
+            <h3 style={{ margin: '0 0 8px 0', fontSize: 14, fontWeight: 700, color: '#374151', textTransform: 'uppercase' }}>Delivery Instructions</h3>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input 
+                type="text" 
+                placeholder="e.g. Leave at door, Gate code 1234" 
+                value={instructionsText} 
+                onChange={e => setInstructionsText(e.target.value)} 
+                style={{ flex: 1, padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14, outline: 'none' }}
+              />
+              <button 
+                onClick={saveInstructions} 
+                style={{ padding: '0 16px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 600, cursor: 'pointer' }}
+              >
+                {instructionsSaved ? 'Saved!' : 'Save'}
+              </button>
             </div>
           </div>
         )}
