@@ -38,27 +38,15 @@ function startFeedbackCron() {
 
       for (const row of allRows) {
         const payload = {
-          type: "interactive",
-          interactive: {
-            type: "button",
-            body: {
-              text: `🐟 *How was your ${row.ordered_item}?*\n\nWe hope you enjoyed your fresh catch today! We'd love to know how your experience was to ensure we always deliver the best quality.`
-            },
-            action: {
-              buttons: [
-                { type: "reply", reply: { id: `F_GREAT_${row.id}`, title: "⭐⭐⭐⭐⭐ Amazing" } },
-                { type: "reply", reply: { id: `F_OKAY_${row.id}`, title: "⭐⭐⭐ It was okay" } },
-                { type: "reply", reply: { id: `F_BAD_${row.id}`, title: "⭐ Had an issue" } }
-              ]
-            }
-          }
+          name: "meeny_preorder",
+          languageCode: "en"
         };
 
         const localId = await insertPendingRow({
-          account, toNumber: row.customer_phone, messageType: 'interactive', messageBody: 'Post-Delivery Feedback'
+          account, toNumber: row.customer_phone, messageType: 'template', messageBody: 'Preorder Broadcast'
         });
         await enqueueSend({
-          kind: 'interactive', accountId: account.id, to: String(row.customer_phone).replace(/\D/g, ''), localMessageId: localId, payload
+          kind: 'template', accountId: account.id, to: String(row.customer_phone).replace(/\D/g, ''), localMessageId: localId, payload
         });
         
         // Mark feedback as sent

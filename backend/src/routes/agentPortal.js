@@ -530,17 +530,8 @@ router.post('/:agentId/start-route', verifyAgent, async (req, res) => {
         to: phone,
         type: "template",
         template: {
-          name: "order_out_for_delivery",
-          language: { code: "en" },
-          components: [
-            {
-              type: "body",
-              parameters: [
-                { type: "text", text: customerName },
-                { type: "text", text: orderIdDisplay }
-              ]
-            }
-          ]
+          name: "meeny_preorder",
+          language: { code: "en" }
         }
       };
 
