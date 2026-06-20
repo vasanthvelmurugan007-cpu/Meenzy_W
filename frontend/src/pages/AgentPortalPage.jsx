@@ -229,6 +229,7 @@ export default function AgentPortalPage() {
   const isDriveModeRef = useRef(isDriveMode);
   const allRoutesRef = useRef([]);
   const lastRerouteTime = useRef(0);
+  const optimizedSequenceRef = useRef(null);
 
   // Sync refs
   useEffect(() => {
@@ -558,7 +559,6 @@ export default function AgentPortalPage() {
 
   const [optimizing, setOptimizing] = useState(false);
   const [optimizedSequence, setOptimizedSequence] = useState(null);
-  const optimizedSequenceRef = useRef(null);
 
   async function handleOptimizeRoute() {
     if (orders.length < 2) return;
