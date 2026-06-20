@@ -125,12 +125,7 @@ export default function PublicTrackingPage() {
               latitude: parseFloat(orderData.agent.lat),
               zoom: 14
             }}
-            mapStyle={`https://api.olamaps.io/tiles/vector/v1/styles/default-light-standard/style.json`}
-            transformRequest={(url, resourceType) => {
-              if (url.includes('api.olamaps.io')) {
-                return { url: `${url}${url.includes('?') ? '&' : '?'}api_key=${mapToken}` };
-              }
-            }}
+            mapStyle={`https://basemaps.cartocdn.com/gl/positron-gl-style/style.json`}
           >
             <NavigationControl position="top-right" />
             
