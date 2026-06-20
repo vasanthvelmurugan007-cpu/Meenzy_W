@@ -1,7 +1,8 @@
+const olaMapsService = require('./olaMapsService');
+
 /**
  * Geocodes an address string to latitude and longitude.
- * Strategy: pincode-first for Indian addresses (6-digit), then full address.
- * Adds countrycode=IN to all OpenCage queries to prevent cross-country mismatches.
+ * Strategy: AI Address Sanitization -> Ola Maps Geocoding
  * @param {string} address - The address to geocode.
  * @returns {Promise<{lat: number, lng: number}|null>}
  */
@@ -12,7 +13,6 @@ async function geocodeAddress(address) {
   const pincodeMatch = address.match(/\b(\d{6})\b/);
   const pincode = pincodeMatch ? pincodeMatch[1] : null;
 
-  const openCageKey = process.env.OPENCAGE_API_KEY;
   const groqKey = process.env.GROQ_API_KEY;
   let result = null;
 
@@ -44,64 +44,27 @@ async function geocodeAddress(address) {
     }
   }
 
-  if (openCageKey) {
-    try {
-      // ── Strategy 1: AI Cleaned Address Geocoding ──
-      const fullUrl = `https://api.opencagedata.com/geocode/v1/json?q=${encodeURIComponent(cleanedAddress + ', India')}&key=${openCageKey}&limit=1&countrycode=in`;
-      const fullResp = await fetch(fullUrl, { signal: AbortSignal.timeout(5000) });
-      if (fullResp.ok) {
-        const fullData = await fullResp.json();
-        if (fullData.results && fullData.results.length > 0) {
-          const r = fullData.results[0];
-          const { lat, lng } = r.geometry;
-          if (lat >= 6 && lat <= 37 && lng >= 68 && lng <= 97 && r.confidence >= 3) {
-            console.log(`[Geocoder] OpenCage Cleaned Address "${cleanedAddress}" -> Lat: ${lat}, Lng: ${lng}`);
-            result = { lat, lng };
-          }
-        }
-      }
-
-      // ── Strategy 2: Pincode Fallback ──
-      if (!result && pincode) {
-        const pincodeUrl = `https://api.opencagedata.com/geocode/v1/json?q=${encodeURIComponent(pincode + ', India')}&key=${openCageKey}&limit=1&countrycode=in`;
-        const pincodeResp = await fetch(pincodeUrl, { signal: AbortSignal.timeout(5000) });
-        if (pincodeResp.ok) {
-          const pincodeData = await pincodeResp.json();
-          if (pincodeData.results && pincodeData.results.length > 0) {
-            const r = pincodeData.results[0];
-            const { lat, lng } = r.geometry;
-            if (lat >= 6 && lat <= 37 && lng >= 68 && lng <= 97) {
-              console.log(`[Geocoder] OpenCage pincode "${pincode}" -> Lat: ${lat}, Lng: ${lng}`);
-              result = { lat, lng };
-            }
-          }
-        }
-      }
-    } catch (error) {
-      console.error('[Geocoder] OpenCage error, falling back to Nominatim:', error.message);
+  // ── Strategy 1: Ola Maps Cleaned Address Geocoding ──
+  try {
+    const geoData = await olaMapsService.geocode(cleanedAddress);
+    if (geoData) {
+      console.log(`[Geocoder] Ola Maps resolved "${cleanedAddress}" -> Lat: ${geoData.lat}, Lng: ${geoData.lng}`);
+      result = { lat: geoData.lat, lng: geoData.lng };
     }
+  } catch (error) {
+    console.error('[Geocoder] Ola Maps address error:', error.message);
   }
 
-  // ── Fallback: Nominatim (OpenStreetMap) ──
-  if (!result) {
+  // ── Strategy 2: Ola Maps Pincode Fallback ──
+  if (!result && pincode) {
     try {
-      const query = cleanedAddress || (pincode ? `${pincode}, India` : address);
-      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=in`;
-      const response = await fetch(url, {
-        headers: { 'User-Agent': 'ForgeCRM/1.0 (Delivery Routing Engine)' },
-        signal: AbortSignal.timeout(5000)
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data && data.length > 0) {
-          const { lat, lon } = data[0];
-          console.log(`[Geocoder] Nominatim resolved "${query}" -> Lat: ${lat}, Lng: ${lon}`);
-          result = { lat: parseFloat(lat), lng: parseFloat(lon) };
-        }
+      const geoData = await olaMapsService.geocode(`${pincode}, India`);
+      if (geoData) {
+        console.log(`[Geocoder] Ola Maps pincode "${pincode}" -> Lat: ${geoData.lat}, Lng: ${geoData.lng}`);
+        result = { lat: geoData.lat, lng: geoData.lng };
       }
     } catch (error) {
-      console.error('[Geocoder] Nominatim error:', error.message);
+      console.error('[Geocoder] Ola Maps pincode error:', error.message);
     }
   }
 
