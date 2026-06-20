@@ -1736,6 +1736,19 @@ router.post('/public/checkout', async (req, res) => {
       }
 
       await client.query('COMMIT');
+      
+      const io = require('../socket').getIO();
+      if (io && ecosystemOrderId) {
+        io.to('delivery-agents').emit('new_order', {
+          id: ecosystemOrderId,
+          user_phone: normalizedPhone,
+          total_price: total,
+          status: 'CREATED',
+          address_line: addressLine,
+          lat: lat,
+          lng: lng
+        });
+      }
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;

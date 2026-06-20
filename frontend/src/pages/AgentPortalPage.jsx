@@ -24,6 +24,7 @@ function decodePolyline(str, precision = 5) {
 import { C, FONT } from '../constants';
 import AgentLogin from './AgentLogin';
 import AgentRegister from './AgentRegister';
+import { io } from 'socket.io-client';
 
 const SwipeButton = ({ onSwipeComplete, label }) => {
   const [position, setPosition] = useState(0);
@@ -253,19 +254,34 @@ export default function AgentPortalPage() {
     }
   }, [agentToken]);
 
-  // 2. Fetch Orders for Selected Agent (and poll)
+  // 2. Fetch Orders for Selected Agent
   useEffect(() => {
     if (selectedAgent && agentToken) {
       fetchOrders();
       fetchStats();
 
-      // Poll every 10 seconds to auto-sync new batch assignments
-      const intervalId = setInterval(() => {
-        fetchOrders(true); // silent fetch
-        fetchStats(true);
-      }, 10000);
+      // Connect to Socket.io for real-time order routing
+      const socket = io(import.meta.env.VITE_BACKEND_URL || window.location.origin, {
+        path: '/socket.io'
+      });
 
-      return () => clearInterval(intervalId);
+      socket.on('connect', () => {
+        console.log('[AgentPortal] Connected to live routing socket');
+        socket.emit('join_delivery_agents');
+      });
+
+      socket.on('new_order', (newOrder) => {
+        console.log('[AgentPortal] Live order received:', newOrder);
+        setOrders(prev => {
+          // Avoid duplicate appends
+          if (prev.some(o => o.id === newOrder.id)) return prev;
+          return [...prev, newOrder];
+        });
+      });
+
+      return () => {
+        socket.disconnect();
+      };
     }
   }, [selectedAgent, agentToken]);
 

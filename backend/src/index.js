@@ -284,6 +284,9 @@ async function start() {
     console.log(`[Meenzy] Backend running on port ${PORT}`);
   });
 
+  // Initialize Socket.io
+  require('./socket').init(server);
+
   // Graceful shutdown so BullMQ marks in-flight jobs as stalled (not lost)
   const shutdown = async (sig) => {
     console.log(`[Meenzy] ${sig} received, draining…`);

@@ -87,13 +87,16 @@ router.post('/', async (req, res) => {
           const lat = geo ? geo.lat : null;
           const lng = geo ? geo.lng : null;
 
+          let ecoOrderId = null;
           try {
             await client.query('SAVEPOINT check_eco');
-            await client.query(`
+            const ecoRes = await client.query(`
               INSERT INTO coexistence.ecosystem_orders 
               (user_phone, total_price, status, payment_status, source, address_line, order_items, lat, lng)
               VALUES ($1, $2, 'CONFIRMED', 'PAID', 'WHATSAPP_NATIVE', $3, $4::jsonb, $5, $6)
+              RETURNING id
             `, [customerPhone, totalAmount, address, orderItemsJson, lat, lng]);
+            ecoOrderId = ecoRes.rows[0].id;
             await client.query('RELEASE SAVEPOINT check_eco');
           } catch (ecoErr) {
             await client.query('ROLLBACK TO SAVEPOINT check_eco');
@@ -102,9 +105,28 @@ router.post('/', async (req, res) => {
                 INSERT INTO coexistence.ecosystem_orders 
                 (user_phone, total_price, status, address_line, lat, lng)
                 VALUES ($1, $2, 'CONFIRMED', $3, $4, $5)
+                RETURNING id
               `, [customerPhone, totalAmount, address, lat, lng]);
+              ecoOrderId = ecoRes.rows[0].id;
             } else {
               throw ecoErr;
+            }
+          }
+
+          }
+          
+          if (ecoOrderId) {
+            const io = require('../socket').getIO();
+            if (io) {
+              io.to('delivery-agents').emit('new_order', {
+                id: ecoOrderId,
+                user_phone: customerPhone,
+                total_price: totalAmount,
+                status: 'CONFIRMED',
+                address_line: address,
+                lat: lat,
+                lng: lng
+              });
             }
           }
 
