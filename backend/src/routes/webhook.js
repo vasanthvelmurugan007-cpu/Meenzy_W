@@ -98,6 +98,7 @@ async function triageWithLLM(messageText, preferences = null) {
     
     const prompt = `You are an AI assistant for Meenzy Fresh Seafood. Classify the user's intent into EXACTLY ONE of these categories:
 - PLACING_ORDER (User wants to buy something)
+- PRICE_QUERY (User is asking for the price of a specific item or items)
 - ORDER_COMPLAINT (User is unhappy, missing items, bad quality)
 - DELIVERY_QUERY (User is asking when it arrives)
 - RECIPE_QUERY (User is asking how to cook, recipes, marinades for seafood)
@@ -1434,6 +1435,44 @@ const { fetchCatalogProducts } = require('../services/wixCatalogFetcher');
                     }
                   }
                   r.__handled = true;
+               } else if (intent === 'PRICE_QUERY') {
+                 const llmResponse = await extractOrderLLM(trimmedBody, prefs);
+                 const items = llmResponse.items || [];
+                 const { resolveAccount, insertPendingRow } = require('../services/messageSender');
+                 const { enqueueSend } = require('../queue/sendQueue');
+                 const { account, error } = await resolveAccount({});
+
+                 if (!error && account) {
+                   if (items && items.length > 0) {
+                     const { getAllMatchesForExtractedItem } = require('../catalogParser');
+                     let responseText = "Here are the prices you requested:\n\n";
+                     let foundAny = false;
+                     
+                     for (const item of items) {
+                       const matches = getAllMatchesForExtractedItem(item.item);
+                       if (matches && matches.length > 0) {
+                         foundAny = true;
+                         for (const match of matches.slice(0, 3)) {
+                           responseText += `🐟 *${match.name}*: ₹${match.pricePerKg} per Kg\n`;
+                         }
+                       }
+                     }
+                     
+                     if (!foundAny) {
+                       responseText = `Sorry, I couldn't find the exact price for *${items.map(i => i.item).join(', ')}*. Please check our live catalog!`;
+                     } else {
+                       responseText += `\nWould you like to place an order? Simply reply with the quantity!`;
+                     }
+                     
+                     const localId = await insertPendingRow({ account, toNumber: r.contact_number, messageType: 'text', messageBody: responseText });
+                     await enqueueSend({ kind: 'text', accountId: account.id, to: String(r.contact_number).replace(/\D/g, ''), localMessageId: localId, payload: { body: responseText, previewUrl: false } });
+                   } else {
+                     const text = "Please specify the exact fish name to check the price, or browse our live catalog!";
+                     const localId = await insertPendingRow({ account, toNumber: r.contact_number, messageType: 'text', messageBody: text });
+                     await enqueueSend({ kind: 'text', accountId: account.id, to: String(r.contact_number).replace(/\D/g, ''), localMessageId: localId, payload: { body: text, previewUrl: false } });
+                   }
+                 }
+                 r.__handled = true;
                } else if (intent === 'GENERAL_FAQ' || intent === 'DELIVERY_QUERY') {
                  const text = await generateFAQResponseLLM(trimmedBody);
                  if (text) {
