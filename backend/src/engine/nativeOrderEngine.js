@@ -9,6 +9,7 @@ const { createPaymentLink } = require('../services/razorpayService');
 async function startNativeOrderFlow(whatsappId, account, items) {
   if (!items || items.length === 0) return;
   const requestedItem = items[0].item;
+  const initialQty = items[0].qty || null;
   
   const matches = getAllMatchesForExtractedItem(requestedItem);
   if (matches.length === 0) {
@@ -23,7 +24,7 @@ async function startNativeOrderFlow(whatsappId, account, items) {
     matches: matches,
     selectedProduct: null,
     selectedCut: null,
-    selectedQty: null,
+    selectedQty: initialQty,
     native_state: 'AWAITING_PRODUCT'
   };
 
@@ -43,28 +44,8 @@ async function startNativeOrderFlow(whatsappId, account, items) {
     `, [whatsappId, JSON.stringify(stateContext)]);
     await client.query('COMMIT');
     
-    // If only 1 match, auto-select it and skip to variants/quantity
-    if (matches.length === 1) {
-       await handleProductSelection(whatsappId, account, 0);
-       return;
-    }
-
-    // Send List Message for multiple matches
-    const rows = matches.slice(0, 10).map((m, idx) => ({
-      id: `C_PROD:${idx}`,
-      title: m.name.substring(0, 24),
-      description: `₹${m.pricePerKg}`.substring(0, 72)
-    }));
-    
-    const payload = {
-      type: "list",
-      header: { type: "text", text: `🐟 Select Product` },
-      body: { text: `We found a few options for *${requestedItem}*. Please pick one:` },
-      action: { button: "Options", sections: [{ title: "Available Items", rows }] }
-    };
-    
-    const localId = await insertPendingRow({ account, toNumber: whatsappId, messageType: 'interactive', messageBody: 'Select Product' });
-    await enqueueSend({ kind: 'interactive', accountId: account.id, to: String(whatsappId).replace(/\D/g, ''), localMessageId: localId, payload: { interactive: payload } });
+    // Always auto-select the first match, skipping the options menu
+    await handleProductSelection(whatsappId, account, 0);
 
   } catch (err) {
     await client.query('ROLLBACK');
@@ -91,9 +72,22 @@ async function handleProductSelection(whatsappId, account, matchIndex) {
       await client.query(`UPDATE coexistence.meenzy_carts SET current_state = 'CART_REVIEW', state_context = $1, updated_at = now() WHERE whatsapp_id = $2`, [JSON.stringify(context), whatsappId]);
       await askForCut(whatsappId, account, selectedProduct);
     } else {
-      context.native_state = 'AWAITING_QUANTITY';
-      await client.query(`UPDATE coexistence.meenzy_carts SET current_state = 'CART_REVIEW', state_context = $1, updated_at = now() WHERE whatsapp_id = $2`, [JSON.stringify(context), whatsappId]);
-      await askForQuantity(whatsappId, account, selectedProduct);
+      if (context.selectedQty) {
+        context.native_state = 'AWAITING_ADDRESS';
+        const cartItem = {
+          name: context.selectedProduct.name,
+          qty: context.selectedQty,
+          pricePerKg: context.selectedProduct.pricePerKg,
+          selectedCut: null
+        };
+        context.items = [cartItem];
+        await client.query(`UPDATE coexistence.meenzy_carts SET current_state = 'CART_REVIEW', state_context = $1, updated_at = now() WHERE whatsapp_id = $2`, [JSON.stringify(context), whatsappId]);
+        await askForAddress(whatsappId, account, context);
+      } else {
+        context.native_state = 'AWAITING_QUANTITY';
+        await client.query(`UPDATE coexistence.meenzy_carts SET current_state = 'CART_REVIEW', state_context = $1, updated_at = now() WHERE whatsapp_id = $2`, [JSON.stringify(context), whatsappId]);
+        await askForQuantity(whatsappId, account, selectedProduct);
+      }
     }
   } finally {
     client.release();
@@ -128,10 +122,23 @@ async function handleCutSelection(whatsappId, account, cutIndex) {
     if (!selectedProduct) return;
     
     context.selectedCut = selectedProduct.cutOptions[cutIndex];
-    context.native_state = 'AWAITING_QUANTITY';
     
-    await client.query(`UPDATE coexistence.meenzy_carts SET current_state = 'CART_REVIEW', state_context = $1, updated_at = now() WHERE whatsapp_id = $2`, [JSON.stringify(context), whatsappId]);
-    await askForQuantity(whatsappId, account, selectedProduct);
+    if (context.selectedQty) {
+      context.native_state = 'AWAITING_ADDRESS';
+      const cartItem = {
+        name: context.selectedProduct.name,
+        qty: context.selectedQty,
+        pricePerKg: context.selectedProduct.pricePerKg,
+        selectedCut: context.selectedCut
+      };
+      context.items = [cartItem];
+      await client.query(`UPDATE coexistence.meenzy_carts SET current_state = 'CART_REVIEW', state_context = $1, updated_at = now() WHERE whatsapp_id = $2`, [JSON.stringify(context), whatsappId]);
+      await askForAddress(whatsappId, account, context);
+    } else {
+      context.native_state = 'AWAITING_QUANTITY';
+      await client.query(`UPDATE coexistence.meenzy_carts SET current_state = 'CART_REVIEW', state_context = $1, updated_at = now() WHERE whatsapp_id = $2`, [JSON.stringify(context), whatsappId]);
+      await askForQuantity(whatsappId, account, selectedProduct);
+    }
   } finally {
     client.release();
   }
