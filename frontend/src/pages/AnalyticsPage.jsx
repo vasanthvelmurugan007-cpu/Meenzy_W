@@ -4,7 +4,7 @@ import { C, FONT } from '../constants';
 import { TrendingUp, Award, Map as MapIcon, BarChart3, AlertCircle } from 'lucide-react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import Map, { NavigationControl, Source, Layer } from 'react-map-gl';
+import Map, { NavigationControl, Source, Layer } from 'react-map-gl/maplibre';
 
 export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true);
@@ -161,7 +161,7 @@ export default function AnalyticsPage() {
                 mapStyle={`https://api.olamaps.io/tiles/vector/v1/styles/default-light-standard/style.json`}
                 transformRequest={(url, resourceType) => {
                   if (url.includes('api.olamaps.io')) {
-                    const olaToken = import.meta.env.VITE_OLA_MAPS_KEY || import.meta.env.VITE_MAPBOX_TOKEN;
+                    const olaToken = import.meta.env.VITE_OLA_MAPS_KEY || import.meta.env.VITE_OLA_MAPS_API_KEY || import.meta.env.VITE_MAPBOX_TOKEN;
                     return { url: `${url}${url.includes('?') ? '&' : '?'}api_key=${olaToken}` };
                   }
                 }}

@@ -3,7 +3,7 @@ import { api } from '../api';
 import { AlertTriangle, CheckCircle, Package, RefreshCw, XCircle, Clock, MapPin, Navigation, Sparkles, Trash2 } from 'lucide-react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import Map, { Marker, NavigationControl, Popup, Source, Layer } from 'react-map-gl';
+import Map, { Marker, NavigationControl, Popup, Source, Layer } from 'react-map-gl/maplibre';
 import { C, FONT } from '../constants';
 
 const PINCODE_ZONES = {
@@ -394,7 +394,7 @@ export default function DeliveriesPage() {
             mapStyle={`https://api.olamaps.io/tiles/vector/v1/styles/default-light-standard/style.json`}
             transformRequest={(url, resourceType) => {
               if (url.includes('api.olamaps.io')) {
-                const olaToken = import.meta.env.VITE_OLA_MAPS_KEY || import.meta.env.VITE_MAPBOX_TOKEN;
+                const olaToken = import.meta.env.VITE_OLA_MAPS_KEY || import.meta.env.VITE_OLA_MAPS_API_KEY || import.meta.env.VITE_MAPBOX_TOKEN;
                 return { url: `${url}${url.includes('?') ? '&' : '?'}api_key=${olaToken}` };
               }
             }}

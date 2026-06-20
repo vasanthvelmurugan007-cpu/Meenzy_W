@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import Map, { Marker, NavigationControl, Source, Layer } from 'react-map-gl';
+import Map, { Marker, NavigationControl, Source, Layer } from 'react-map-gl/maplibre';
 import { Package, Navigation, Phone, CheckCircle, Clock, Check, Map as MapIcon, MapPin } from 'lucide-react';
 
 // Helper to decode Google Polyline from Ola Maps
@@ -36,7 +36,7 @@ export default function PublicTrackingPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [routeGeoJSON, setRouteGeoJSON] = useState(null);
-  const mapToken = import.meta.env.VITE_OLA_MAPS_KEY || import.meta.env.VITE_MAPBOX_TOKEN;
+  const mapToken = import.meta.env.VITE_OLA_MAPS_KEY || import.meta.env.VITE_OLA_MAPS_API_KEY || import.meta.env.VITE_MAPBOX_TOKEN;
 
   useEffect(() => {
     fetchTrackingData();

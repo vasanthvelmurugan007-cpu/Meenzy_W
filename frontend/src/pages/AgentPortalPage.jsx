@@ -3,7 +3,7 @@ import { api } from '../api';
 import { Package, CheckCircle, MapPin, Phone, CreditCard, Clock, LogIn, Navigation, ArrowRight, Sparkles, Moon, Sun, Camera, Trash2 } from 'lucide-react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import Map, { Marker, NavigationControl, Source, Layer } from 'react-map-gl';
+import Map, { Marker, NavigationControl, Source, Layer } from 'react-map-gl/maplibre';
 
 // Helper to decode Google Polyline from Ola Maps
 function decodePolyline(str, precision = 5) {
@@ -125,7 +125,7 @@ export default function AgentPortalPage() {
     if (!searchQuery) return;
     setSearching(true);
     try {
-      const olaMapsToken = import.meta.env.VITE_OLA_MAPS_KEY || import.meta.env.VITE_MAPBOX_TOKEN;
+      const olaMapsToken = import.meta.env.VITE_OLA_MAPS_KEY || import.meta.env.VITE_OLA_MAPS_API_KEY || import.meta.env.VITE_MAPBOX_TOKEN;
       const res = await fetch(`https://api.olamaps.io/places/v1/geocode?address=${encodeURIComponent(searchQuery)}&api_key=${olaMapsToken}`);
       const data = await res.json();
       const features = (data.geocodingResults || []).map(p => ({
@@ -740,7 +740,7 @@ export default function AgentPortalPage() {
             mapStyle={`https://api.olamaps.io/tiles/vector/v1/styles/default-light-standard/style.json`}
             transformRequest={(url, resourceType) => {
               if (url.includes('api.olamaps.io')) {
-                const olaToken = import.meta.env.VITE_OLA_MAPS_KEY || import.meta.env.VITE_MAPBOX_TOKEN;
+                const olaToken = import.meta.env.VITE_OLA_MAPS_KEY || import.meta.env.VITE_OLA_MAPS_API_KEY || import.meta.env.VITE_MAPBOX_TOKEN;
                 return { url: `${url}${url.includes('?') ? '&' : '?'}api_key=${olaToken}` };
               }
             }}
