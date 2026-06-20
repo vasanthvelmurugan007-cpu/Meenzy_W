@@ -1469,7 +1469,7 @@ const { fetchCatalogProducts } = require('../services/wixCatalogFetcher');
                  }
                  console.log(`[llm-triage] Flagged ORDER_COMPLAINT for ${r.contact_number}`);
                  r.__handled = true;
-               } else if (intent === 'PLACING_ORDER') {
+               } else if (intent === 'PLACING_ORDER' || intent === 'PRICE_QUERY') {
                   const llmResponse = await extractOrderLLM(trimmedBody, prefs);
                   const items = llmResponse.items || [];
                   const { resolveAccount, insertPendingRow } = require('../services/messageSender');
@@ -1478,50 +1478,26 @@ const { fetchCatalogProducts } = require('../services/wixCatalogFetcher');
 
                   if (!error && account) {
                     if (items && items.length > 0) {
-                      // Delegate to Native Order Flow to ask for Cuts / Address
-                      try {
-                        const { startNativeOrderFlow } = require('../engine/nativeOrderEngine');
-                        await startNativeOrderFlow(r.contact_number, account, items);
-                        console.log(`[PLACING_ORDER] Started native order flow for ${r.contact_number}`);
-                      } catch (err) {
-                        console.error('[PLACING_ORDER] Error starting native flow:', err);
-                        const fallbackMsg = "Oops! We encountered an issue processing your order. Please type 'Hi' to start over.";
-                        const localId = await insertPendingRow({ account, toNumber: r.contact_number, messageType: 'text', messageBody: fallbackMsg });
-                        await enqueueSend({ kind: 'text', accountId: account.id, to: String(r.contact_number).replace(/\D/g, ''), localMessageId: localId, payload: { body: fallbackMsg, previewUrl: false } });
+                      const { getAllMatchesForExtractedItem } = require('../catalogParser');
+                      const matches = getAllMatchesForExtractedItem(items[0].item);
+                      
+                      let text = "";
+                      if (matches && matches.length > 0) {
+                        text = `🐟 The item you asked for (*${items[0].item}*) is available today! 🎉\n\nPlease go to our website to view sizes, cuts, and place your order directly:\n👉 https://www.meenzy.in`;
+                      } else {
+                        text = `Sorry, we couldn't find an exact match for *${items[0].item}* today. 😔\n\nPlease browse our full live catalog to see what's available:\n👉 https://www.meenzy.in`;
                       }
+                      
+                      const localId = await insertPendingRow({ account, toNumber: r.contact_number, messageType: 'text', messageBody: text });
+                      await enqueueSend({ kind: 'text', accountId: account.id, to: String(r.contact_number).replace(/\D/g, ''), localMessageId: localId, payload: { body: text, previewUrl: true } });
                     } else {
                       // Fallback if LLM couldn't extract items
-                      const listPayload = {
-                        type: "list",
-                        body: { text: "It looks like you'd like to place an order! Could you please specify the exact fish and quantity (e.g., '1kg rohu')? Or click below to view our live catalog." },
-                        action: {
-                          button: "View Catalog",
-                          sections: [{ title: "Seafood", rows: [{ id: "category_all", title: "🐟 View Catalog", description: "Browse all items" }] }]
-                        }
-                      };
-                      const localId = await insertPendingRow({ account, toNumber: r.contact_number, messageType: 'interactive', messageBody: 'LLM Intake Fallback: Catalog link' });
-                      await enqueueSend({ kind: 'interactive', accountId: account.id, to: String(r.contact_number).replace(/\D/g, ''), localMessageId: localId, payload: { interactive: listPayload } });
+                      const text = "It looks like you're looking to place an order! You can view our live catalog and order directly on our website:\n👉 https://www.meenzy.in";
+                      const localId = await insertPendingRow({ account, toNumber: r.contact_number, messageType: 'text', messageBody: text });
+                      await enqueueSend({ kind: 'text', accountId: account.id, to: String(r.contact_number).replace(/\D/g, ''), localMessageId: localId, payload: { body: text, previewUrl: true } });
                     }
                   }
                   r.__handled = true;
-               } else if (intent === 'PRICE_QUERY') {
-                 const llmResponse = await extractOrderLLM(trimmedBody, prefs);
-                 const items = llmResponse.items || [];
-                 const { resolveAccount, insertPendingRow } = require('../services/messageSender');
-                 const { enqueueSend } = require('../queue/sendQueue');
-                 const { account, error } = await resolveAccount({});
-
-                 if (!error && account) {
-                   if (items && items.length > 0) {
-                     const { startNativeOrderFlow } = require('../engine/nativeOrderEngine');
-                     await startNativeOrderFlow(r.contact_number, account, items);
-                   } else {
-                     const text = "Please specify the exact fish name to check the price, or browse our live catalog!";
-                     const localId = await insertPendingRow({ account, toNumber: r.contact_number, messageType: 'text', messageBody: text });
-                     await enqueueSend({ kind: 'text', accountId: account.id, to: String(r.contact_number).replace(/\D/g, ''), localMessageId: localId, payload: { body: text, previewUrl: false } });
-                   }
-                 }
-                 r.__handled = true;
                } else if (intent === 'GENERAL_FAQ' || intent === 'DELIVERY_QUERY') {
                  const text = await generateFAQResponseLLM(trimmedBody);
                  if (text) {
