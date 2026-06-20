@@ -168,16 +168,22 @@ async function handleQuantitySelection(whatsappId, account, qty) {
       selectedCut: context.selectedCut
     };
     context.items = [cartItem];
-    context.native_state = 'CART_REVIEW'; // Just waiting for address now
+    context.native_state = 'AWAITING_ADDRESS'; // Waiting for address now
 
     await client.query(`UPDATE coexistence.meenzy_carts SET current_state = 'CART_REVIEW', state_context = $1, updated_at = now() WHERE whatsapp_id = $2`, [JSON.stringify(context), whatsappId]);
-    await sendCartSummaryAndAskAddress(whatsappId, account, context);
+    await askForAddress(whatsappId, account, context);
   } finally {
     client.release();
   }
 }
 
-async function sendCartSummaryAndAskAddress(whatsappId, account, context) {
+async function askForAddress(whatsappId, account, context) {
+  const summaryText = `Please reply with your full delivery address to proceed.`;
+  const localId = await insertPendingRow({ account, toNumber: whatsappId, messageType: 'text', messageBody: 'Address Request' });
+  await enqueueSend({ kind: 'text', accountId: account.id, to: String(whatsappId).replace(/\D/g, ''), localMessageId: localId, payload: { body: summaryText, previewUrl: false } });
+}
+
+async function sendCartSummaryAndAskPaymentMethod(whatsappId, account, context) {
   const items = context.items || [];
   let total = 0;
   let summaryText = '🛒 *Cart Summary*\n';
@@ -189,10 +195,21 @@ async function sendCartSummaryAndAskAddress(whatsappId, account, context) {
     summaryText += `- ${item.qty}kg ${item.name}${cutStr} : ₹${itemTotal}\n`;
   }
   
-  summaryText += `\n*Total: ₹${total}*\n\nPlease reply with your full delivery address to proceed.`;
+  summaryText += `\n*Total: ₹${total}*\n\nHow would you like to pay?`;
   
-  const localId = await insertPendingRow({ account, toNumber: whatsappId, messageType: 'text', messageBody: 'Cart Summary' });
-  await enqueueSend({ kind: 'text', accountId: account.id, to: String(whatsappId).replace(/\D/g, ''), localMessageId: localId, payload: { body: summaryText, previewUrl: false } });
+  const buttons = [
+    { type: "reply", reply: { id: "PAY_ONLINE", title: "Pay Online" } },
+    { type: "reply", reply: { id: "PAY_COD", title: "Cash on Delivery" } }
+  ];
+
+  const payload = {
+    type: "button",
+    body: { text: summaryText },
+    action: { buttons }
+  };
+
+  const localId = await insertPendingRow({ account, toNumber: whatsappId, messageType: 'interactive', messageBody: 'Cart Summary & Payment' });
+  await enqueueSend({ kind: 'interactive', accountId: account.id, to: String(whatsappId).replace(/\D/g, ''), localMessageId: localId, payload: { interactive: payload } });
 }
 
 async function askForPaymentMethod(whatsappId, account) {
@@ -378,17 +395,33 @@ async function handleNativeInteraction(whatsappId, account, cart, incomingPayloa
     return true;
   }
 
-  if (cart.current_state === 'CART_REVIEW' && nativeState === 'CART_REVIEW') {
+  if (cart.current_state === 'CART_REVIEW' && nativeState === 'AWAITING_ADDRESS') {
     if (incomingText && incomingText.trim().length > 5) {
       context.address = incomingText.trim();
-      context.native_state = 'AWAITING_PAYMENT';
+      context.native_state = 'AWAITING_PAYMENT_METHOD';
       const client = await pool.connect();
       try {
         await client.query(`UPDATE coexistence.meenzy_carts SET current_state = 'CART_REVIEW', state_context = $1 WHERE whatsapp_id = $2 AND status = 'active'`, [JSON.stringify(context), whatsappId]);
       } finally {
         client.release();
       }
-      await generatePaymentLinkAndSend(whatsappId, account, context);
+      await sendCartSummaryAndAskPaymentMethod(whatsappId, account, context);
+      return true;
+    }
+  }
+
+  if (cart.current_state === 'CART_REVIEW' && nativeState === 'AWAITING_PAYMENT_METHOD' && incomingPayload) {
+    if (incomingPayload === 'PAY_COD') {
+      await finalizeCODOrder(whatsappId, account, context);
+      return true;
+    }
+    if (incomingPayload === 'PAY_ONLINE') {
+      const msg = `Sorry, as of now online payments are not accepted. Please select Cash on Delivery.`;
+      const localId = await insertPendingRow({ account, toNumber: whatsappId, messageType: 'text', messageBody: 'Online Payment Not Accepted' });
+      await enqueueSend({ kind: 'text', accountId: account.id, to: String(whatsappId).replace(/\D/g, ''), localMessageId: localId, payload: { body: msg, previewUrl: false } });
+      
+      // Re-send the cart summary and payment options
+      await sendCartSummaryAndAskPaymentMethod(whatsappId, account, context);
       return true;
     }
   }
