@@ -24,9 +24,9 @@ export default function PreordersPage() {
         api.meenzy.bulkQuotes(),
         api.agents.list()
       ]);
-      setPreorders(preordersData);
-      setBulkQuotes(quotesData);
-      setAgents(agentsData.filter(a => a.is_active));
+      setPreorders(Array.isArray(preordersData) ? preordersData : preordersData.preorders || []);
+      setBulkQuotes(Array.isArray(quotesData) ? quotesData : quotesData.quotes || []);
+      setAgents((agentsData.agents || agentsData || []).filter(a => a.is_active));
       setError(null);
     } catch (err) {
       setError('Failed to fetch data.');
