@@ -993,6 +993,33 @@ router.post('/webhook/whatsapp', async (req, res) => {
             }
             r.__handled = true;
           }
+
+          if (/^(catalog|website|menu)$/i.test(trimmedBody) && !r.__handled) {
+            console.log(`[meenzy-catalog] Inbound catalog request from customer: ${r.contact_number}`);
+            
+            const { resolveAccount, insertPendingRow } = require('../services/messageSender');
+            const { enqueueSend } = require('../queue/sendQueue');
+            
+            const { account, error } = await resolveAccount({});
+            if (!error && account) {
+              const catalogText = "🐟 *Meenzy Live Catalog* 🐟\n\nYou can view our full range of fresh seafood and place your order directly on our website:\n👉 https://www.meenzy.in\n\nOr you can simply tell me here what fish you'd like to order!";
+              
+              const localId = await insertPendingRow({
+                account,
+                toNumber: r.contact_number,
+                messageType: 'text',
+                messageBody: 'Sent website link',
+              });
+              await enqueueSend({
+                kind: 'text',
+                accountId: account.id,
+                to: String(r.contact_number).replace(/\D/g, ''),
+                localMessageId: localId,
+                payload: { body: catalogText, previewUrl: true },
+              });
+            }
+            r.__handled = true;
+          }
         }
 
 
