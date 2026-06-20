@@ -135,7 +135,7 @@ app.get('/api/run-geocode-fix', async (req, res) => {
         }
       }
     }
-    res.json({ ok: true, updated: count, totalFound: rows.length });
+    res.json({ ok: true, updated: count, totalFound: rows.length, details: rows });
   } catch(e) {
     res.status(500).json({ error: e.message });
   }
