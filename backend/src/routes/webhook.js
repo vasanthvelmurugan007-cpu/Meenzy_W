@@ -173,7 +173,7 @@ async function extractOrderLLM(messageText, preferences = null) {
     // Admins can configure the master prompt via the AiAgentBuilderPage
     const systemPrompt = process.env.LLM_INTAKE_PROMPT || `You are an AI order intake agent for Meenzy Fresh Seafood. 
 Extract the seafood items and quantities from the user's message. 
-Map the items to standard names (e.g., "vanjaram" -> "Seer Fish", "prawn" -> "White Prawns", "pomfret" -> "Pomfret", "rohu" -> "Rohu", "mathi" -> "Sardine", "sankara" -> "Shankara", "red snapper" -> "Red Snapper").
+Map the items to standard names (e.g., "vanjaram" -> "Seer Fish", "prawn" -> "Prawn", "pomfret" -> "Pomfret", "rohu" -> "Rohu", "mathi" -> "Sardine", "sankara" -> "Shankara", "red snapper" -> "Red Snapper").
 If a fish name is not in the list, just use the name the user provided with proper capitalization.
 You must also generate a friendly order confirmation message that matches the exact language and tone the user used (e.g. Tanglish, Tamil, or English). Do NOT include the checkout link in the reply, just the friendly confirmation.
 Return the result strictly as a JSON object with keys "items" (array of {item: string, qty: number}) and "reply" (string).
@@ -1451,28 +1451,8 @@ const { fetchCatalogProducts } = require('../services/wixCatalogFetcher');
 
                  if (!error && account) {
                    if (items && items.length > 0) {
-                     const { getAllMatchesForExtractedItem } = require('../catalogParser');
-                     let responseText = "Here are the prices you requested:\n\n";
-                     let foundAny = false;
-                     
-                     for (const item of items) {
-                       const matches = getAllMatchesForExtractedItem(item.item);
-                       if (matches && matches.length > 0) {
-                         foundAny = true;
-                         for (const match of matches.slice(0, 3)) {
-                           responseText += `🐟 *${match.name}*: ₹${match.pricePerKg} per Kg\n`;
-                         }
-                       }
-                     }
-                     
-                     if (!foundAny) {
-                       responseText = `Sorry, I couldn't find the exact price for *${items.map(i => i.item).join(', ')}*. Please check our live catalog!`;
-                     } else {
-                       responseText += `\nWould you like to place an order? Simply reply with the quantity!`;
-                     }
-                     
-                     const localId = await insertPendingRow({ account, toNumber: r.contact_number, messageType: 'text', messageBody: responseText });
-                     await enqueueSend({ kind: 'text', accountId: account.id, to: String(r.contact_number).replace(/\D/g, ''), localMessageId: localId, payload: { body: responseText, previewUrl: false } });
+                     const { startNativeOrderFlow } = require('../engine/nativeOrderEngine');
+                     await startNativeOrderFlow(r.contact_number, account, items);
                    } else {
                      const text = "Please specify the exact fish name to check the price, or browse our live catalog!";
                      const localId = await insertPendingRow({ account, toNumber: r.contact_number, messageType: 'text', messageBody: text });
