@@ -175,7 +175,7 @@ async function extractOrderLLM(messageText, preferences = null) {
 Extract the seafood items and quantities from the user's message. 
 Map the items to standard names (e.g., "vanjaram" -> "Seer Fish", "prawn" -> "Prawn", "pomfret" -> "Pomfret", "rohu" -> "Rohu", "mathi" -> "Sardine", "sankara" -> "Shankara", "red snapper" -> "Red Snapper").
 If a fish name is not in the list, just use the name the user provided with proper capitalization.
-You must also generate a friendly order confirmation message that matches the exact language and tone the user used (e.g. Tanglish, Tamil, or English). Do NOT include the checkout link in the reply, just the friendly confirmation.
+You must also generate a friendly message that matches the exact language and tone the user used (e.g. Tanglish: "Neenga keta item namma website la irukku, please adha check pannunga!", Tamil, or English). The message should tell the customer that their item is available and they can order it directly on the website. Also, mention they can ask us for cooking tips or recipes! Do NOT include the checkout link in the reply, just the friendly message.
 Return the result strictly as a JSON object with keys "items" (array of {item: string, qty: number}) and "reply" (string).
 For example: {"items": [{"item": "Seer Fish", "qty": 2.5}], "reply": "Super! Unga 2.5 kg vanjaram order ready."}
 Never return empty items if any fish name is mentioned. Extract it even if it's misspelled.
@@ -1483,7 +1483,7 @@ const { fetchCatalogProducts } = require('../services/wixCatalogFetcher');
                       
                       let text = "";
                       if (matches && matches.length > 0) {
-                        text = `🐟 The item you asked for (*${items[0].item}*) is available today! 🎉\n\nPlease go to our website to view sizes, cuts, and place your order directly:\n👉 https://www.meenzy.in`;
+                        text = `${llmResponse.reply || `🐟 The item you asked for (*${items[0].item}*) is available today! 🎉\n\nPlease go to our website to view sizes, cuts, and place your order directly.`}\n\n👉 https://www.meenzy.in`;
                       } else {
                         text = `Sorry, we couldn't find an exact match for *${items[0].item}* today. 😔\n\nPlease browse our full live catalog to see what's available:\n👉 https://www.meenzy.in`;
                       }
