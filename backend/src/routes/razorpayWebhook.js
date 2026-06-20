@@ -113,8 +113,6 @@ router.post('/', async (req, res) => {
             }
           }
 
-          }
-          
           if (ecoOrderId) {
             const io = require('../socket').getIO();
             if (io) {
