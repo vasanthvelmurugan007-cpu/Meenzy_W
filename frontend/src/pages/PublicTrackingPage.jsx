@@ -36,6 +36,46 @@ function getBearing(startLat, startLng, destLat, destLng) {
   return (brng + 360) % 360;
 }
 
+// Haversine distance calculator (returns km)
+function calculateDistance(lat1, lon1, lat2, lon2) {
+  if (!lat1 || !lon1 || !lat2 || !lon2) return null;
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+    Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+}
+
+// Dynamically slice the route so the blue line starts exactly at the agent's car
+function getSlicedRoute(fullCoordinates, currentLat, currentLng) {
+  if (!fullCoordinates || fullCoordinates.length === 0) return fullCoordinates;
+  
+  // Find index of closest point in the polyline
+  let minDistance = Infinity;
+  let closestIndex = 0;
+  
+  for (let i = 0; i < fullCoordinates.length; i++) {
+    // GeoJSON coordinates are [lng, lat]
+    const dist = calculateDistance(currentLat, currentLng, fullCoordinates[i][1], fullCoordinates[i][0]);
+    if (dist < minDistance) {
+      minDistance = dist;
+      closestIndex = i;
+    }
+  }
+  
+  // Create new array starting from agent's exact current position
+  // and followed by the remaining path to the destination
+  const newPath = [
+    [currentLng, currentLat],
+    ...fullCoordinates.slice(closestIndex)
+  ];
+  
+  return newPath;
+}
+
 const FONT = "'Inter', sans-serif";
 
 export default function PublicTrackingPage() {
@@ -50,6 +90,7 @@ export default function PublicTrackingPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [routeGeoJSON, setRouteGeoJSON] = useState(null);
+  const [fullRouteCoords, setFullRouteCoords] = useState(null); // Store raw full route
   
   const [etaText, setEtaText] = useState(null);
   const [agentPos, setAgentPos] = useState(null);
@@ -116,9 +157,13 @@ export default function PublicTrackingPage() {
         .then(r => r.json())
         .then(data => {
           if (data.status === 'SUCCESS' && data.routes && data.routes.length > 0) {
+            const rawCoords = decodePolyline(data.routes[0].overview_polyline);
+            setFullRouteCoords(rawCoords);
+            
+            // Initial render of the line (will be immediately sliced by animation loop if agentPos exists)
             setRouteGeoJSON({
               type: 'LineString',
-              coordinates: decodePolyline(data.routes[0].overview_polyline)
+              coordinates: rawCoords
             });
             
             // Extract ETA and distance
@@ -159,20 +204,39 @@ export default function PublicTrackingPage() {
             const progress = Math.min(elapsed / duration, 1);
             const ease = progress * (2 - progress); // easeOutQuad
             
+            const currentAnimatedLat = startLat + (targetLat - startLat) * ease;
+            const currentAnimatedLng = startLng + (targetLng - startLng) * ease;
+            
             setAgentPos({
-              lat: startLat + (targetLat - startLat) * ease,
-              lng: startLng + (targetLng - startLng) * ease
+              lat: currentAnimatedLat,
+              lng: currentAnimatedLng
             });
+            
+            // Dynamically slice the route line so it shrinks as the car moves
+            if (fullRouteCoords) {
+              setRouteGeoJSON({
+                type: 'LineString',
+                coordinates: getSlicedRoute(fullRouteCoords, currentAnimatedLat, currentAnimatedLng)
+              });
+            }
             
             if (progress < 1) {
               requestAnimationFrame(animate);
             }
           };
           requestAnimationFrame(animate);
+        } else {
+          // Even if not moving, we should slice the line based on current position
+          if (fullRouteCoords) {
+            setRouteGeoJSON({
+              type: 'LineString',
+              coordinates: getSlicedRoute(fullRouteCoords, agentPos.lat, agentPos.lng)
+            });
+          }
         }
       }
     }
-  }, [orderData?.agent?.lat, orderData?.agent?.lng]);
+  }, [orderData?.agent?.lat, orderData?.agent?.lng, fullRouteCoords]);
 
   if (loading) return <div style={{ padding: 40, textAlign: 'center', fontFamily: FONT }}>Loading your live delivery status...</div>;
   if (error) return <div style={{ padding: 40, textAlign: 'center', fontFamily: FONT, color: 'red' }}>{error}</div>;
