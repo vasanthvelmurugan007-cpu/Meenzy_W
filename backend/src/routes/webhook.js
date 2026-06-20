@@ -1020,6 +1020,33 @@ router.post('/webhook/whatsapp', async (req, res) => {
             }
             r.__handled = true;
           }
+
+          if (trimmedBody.toLowerCase().includes('i just placed an order on the website') && !r.__handled) {
+            console.log(`[meenzy-website-optin] Received tracking opt-in from: ${r.contact_number}`);
+            
+            const { resolveAccount, insertPendingRow } = require('../services/messageSender');
+            const { enqueueSend } = require('../queue/sendQueue');
+            
+            const { account, error } = await resolveAccount({});
+            if (!error && account) {
+              const optinText = "✅ *Order Received!*\n\nThank you for ordering on our website! We have received your order details.\n\nOnce we verify today's fresh catch with our fishermen, we will send you a confirmation message along with your live delivery tracking link right here! 🐟🚢";
+              
+              const localId = await insertPendingRow({
+                account,
+                toNumber: r.contact_number,
+                messageType: 'text',
+                messageBody: 'Sent website opt-in confirmation',
+              });
+              await enqueueSend({
+                kind: 'text',
+                accountId: account.id,
+                to: String(r.contact_number).replace(/\D/g, ''),
+                localMessageId: localId,
+                payload: { body: optinText, previewUrl: false },
+              });
+            }
+            r.__handled = true;
+          }
         }
 
 
