@@ -380,31 +380,44 @@ router.post('/:agentId/optimize-route', verifyAgent, async (req, res) => {
     const startLat = currentLat ? parseFloat(currentLat) : (validOrders.length > 0 ? parseFloat(validOrders[0].lat) : 13.123565);
     const startLng = currentLng ? parseFloat(currentLng) : (validOrders.length > 0 ? parseFloat(validOrders[0].lng) : 80.291771);
 
-    const olaMapsService = require('../services/olaMapsService');
-    
-    // Construct coordinate array starting with the agent's current location
-    const coordinates = [
-      { lat: startLat, lng: startLng },
-      ...validOrders.map(o => ({ lat: parseFloat(o.lat), lng: parseFloat(o.lng) }))
-    ];
+    // Haversine distance calculator (returns km)
+    const haversineDistance = (lat1, lon1, lat2, lon2) => {
+      const R = 6371;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+        Math.sin(dLon/2) * Math.sin(dLon/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return R * c;
+    };
 
+    // Strict Nearest-Neighbor TSP Algorithm
+    let unvisited = [...validOrders];
     let finalSequence = [];
-    try {
-      // Get optimized waypoint indices from Ola Maps
-      const waypointOrder = await olaMapsService.optimizeRoute(coordinates);
-      
-      // Ola Maps returns indices based on the provided coordinates array.
-      // Index 0 is the agent's start location. We filter it out and map the rest to order IDs.
-      finalSequence = waypointOrder
-        .filter(idx => idx > 0) // Skip start location
-        .map(idx => validOrders[idx - 1].id);
-        
-      finalSequence = [...finalSequence, ...missingOrders];
-    } catch (apiErr) {
-      console.warn('[OlaMaps Optimize Warning] Falling back to sequence order due to API failure', apiErr.message);
-      finalSequence = [...validOrders.map(o => o.id), ...missingOrders];
+    let curLat = startLat;
+    let curLng = startLng;
+
+    while (unvisited.length > 0) {
+      let nearestIdx = -1;
+      let minDistance = Infinity;
+
+      for (let i = 0; i < unvisited.length; i++) {
+        const order = unvisited[i];
+        const dist = haversineDistance(curLat, curLng, parseFloat(order.lat), parseFloat(order.lng));
+        if (dist < minDistance) {
+          minDistance = dist;
+          nearestIdx = i;
+        }
+      }
+
+      const nearestOrder = unvisited.splice(nearestIdx, 1)[0];
+      finalSequence.push(nearestOrder.id);
+      curLat = parseFloat(nearestOrder.lat);
+      curLng = parseFloat(nearestOrder.lng);
     }
 
+    finalSequence = [...finalSequence, ...missingOrders];
     res.json({ ok: true, sequence: finalSequence });
   } catch (err) {
     console.error('[Ola Maps Optimize Error]', err.message);

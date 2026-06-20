@@ -112,6 +112,7 @@ export default function AgentPortalPage() {
   const [error, setError] = useState(null);
   const [agentStats, setAgentStats] = useState({ totalDeliveries: 0, totalEarnings: 0, walletBalance: 0, totalPaid: 0, earningsByDay: [] });
   const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('agentDarkMode') === 'true');
+  const [isVoiceEnabled, setIsVoiceEnabled] = useState(() => localStorage.getItem('agentVoiceMode') !== 'false');
   const [podImages, setPodImages] = useState({}); // { orderId: base64String }
   const [showModifyModal, setShowModifyModal] = useState(null);
   const [rejectItems, setRejectItems] = useState({});
@@ -170,6 +171,17 @@ export default function AgentPortalPage() {
     localStorage.setItem('agentDarkMode', nextMode.toString());
   };
 
+  const toggleVoiceMode = () => {
+    const nextMode = !isVoiceEnabled;
+    setIsVoiceEnabled(nextMode);
+    localStorage.setItem('agentVoiceMode', nextMode.toString());
+    if (nextMode) {
+      window.speechSynthesis.speak(new SpeechSynthesisUtterance("Voice navigation enabled."));
+    } else {
+      window.speechSynthesis.cancel();
+    }
+  };
+
   const theme = {
     bg: isDarkMode ? '#111827' : '#f3f4f6',
     cardBg: isDarkMode ? '#1f2937' : '#fff',
@@ -215,6 +227,23 @@ export default function AgentPortalPage() {
   const [lastBearing, setLastBearing] = useState(0);
 
   const isDriveModeRef = useRef(isDriveMode);
+  const allRoutesRef = useRef([]);
+  const lastRerouteTime = useRef(0);
+
+  // Sync refs
+  useEffect(() => {
+    allRoutesRef.current = allRoutes;
+  }, [allRoutes]);
+
+  // Voice Navigation Hook
+  useEffect(() => {
+    if (isVoiceEnabled && currentInstruction && isDriveMode) {
+      window.speechSynthesis.cancel(); // clear previous
+      const utterance = new SpeechSynthesisUtterance(currentInstruction);
+      utterance.rate = 0.9;
+      window.speechSynthesis.speak(utterance);
+    }
+  }, [currentInstruction, isVoiceEnabled, isDriveMode]);
   useEffect(() => {
     isDriveModeRef.current = isDriveMode;
     // Instantly snap to agent when Drive Mode is turned ON
@@ -368,6 +397,31 @@ export default function AgentPortalPage() {
                 bearing,
                 duration: 1000
               });
+            }
+
+            // Auto-Reroute Logic: Check deviation
+            const currentRoutes = allRoutesRef.current;
+            if (currentRoutes && currentRoutes.length > 0 && currentRoutes[0].geometry) {
+              const polyline = currentRoutes[0].geometry.coordinates;
+              // Find minimum distance to any segment
+              let minDistance = Infinity;
+              for (let i = 0; i < polyline.length - 1; i++) {
+                const [lon1, lat1] = polyline[i];
+                const [lon2, lat2] = polyline[i+1];
+                // Simple point-to-point check for deviation (could be point-to-segment, but this is fast enough for dense polylines)
+                const d1 = calculateDistance(coords.lat, coords.lng, lat1, lon1);
+                const d2 = calculateDistance(coords.lat, coords.lng, lat2, lon2);
+                minDistance = Math.min(minDistance, d1, d2);
+              }
+              
+              const nowMs = Date.now();
+              // If deviated more than 100 meters (0.1 km) and 30 seconds have passed since last reroute
+              if (minDistance > 0.1 && (nowMs - lastRerouteTime.current > 30000)) {
+                lastRerouteTime.current = nowMs;
+                console.log('Deviated from route! Recalculating...');
+                // Trigger a refresh of the route logic by touching state
+                setOrders(prev => [...prev]); // shallow copy triggers useEffect
+              }
             }
           }
           
@@ -624,14 +678,14 @@ export default function AgentPortalPage() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', maxWidth: 600, margin: '0 auto', paddingBottom: 16 }}>
           <div>
             <h1 style={{ fontSize: 20, fontWeight: 800, margin: 0, color: theme.text }}>Agent Portal</h1>
-            <p style={{ color: theme.subText, margin: '4px 0 0 0', fontSize: 13 }}>{selectedAgent.name}</p>
+            <p style={{ fontSize: 13, color: theme.subText, margin: '4px 0 0 0', fontWeight: 600 }}>Hi, {selectedAgent.name}</p>
           </div>
-          <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-            <button onClick={toggleDarkMode} style={{ background: 'transparent', border: 'none', color: theme.subText, cursor: 'pointer', display: 'flex' }}>
-              {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+            <button onClick={toggleDarkMode} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 20 }}>
+              {isDarkMode ? '☀️' : '🌙'}
             </button>
-            <button onClick={handleLogout} style={{ background: 'transparent', border: 'none', color: '#ef4444', fontWeight: 600, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <LogIn size={16} style={{ transform: 'rotate(180deg)' }} /> Log out
+            <button onClick={handleLogout} style={{ background: theme.accentBg, border: `1px solid ${theme.border}`, padding: '6px 12px', borderRadius: 8, color: theme.text, fontWeight: 700, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <LogOut size={14} /> Logout
             </button>
           </div>
         </div>
@@ -749,19 +803,27 @@ export default function AgentPortalPage() {
             </div>
           )}
 
-          {/* Drive Mode Toggle */}
-          <button 
-            onClick={() => setIsDriveMode(!isDriveMode)}
-            style={{ position: 'absolute', top: currentInstruction ? 70 : 12, right: 12, zIndex: 10, background: isDriveMode ? '#10b981' : theme.cardBg, color: isDriveMode ? '#fff' : theme.text, border: `1px solid ${theme.border}`, borderRadius: 8, padding: '8px 12px', fontWeight: 700, fontSize: 12, cursor: 'pointer', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'center', gap: 6 }}
-          >
-            <Navigation size={14} /> {isDriveMode ? 'Drive Mode ON' : 'Start Drive Mode'}
-          </button>
+          {/* Drive Mode & Voice Toggles */}
+          <div style={{ position: 'absolute', top: currentInstruction ? 70 : 12, right: 12, zIndex: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <button 
+              onClick={() => setIsDriveMode(!isDriveMode)}
+              style={{ background: isDriveMode ? '#10b981' : theme.cardBg, color: isDriveMode ? '#fff' : theme.text, border: `1px solid ${theme.border}`, borderRadius: 8, padding: '8px 12px', fontWeight: 700, fontSize: 12, cursor: 'pointer', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              <Navigation size={14} /> {isDriveMode ? 'Drive Mode ON' : 'Start Drive Mode'}
+            </button>
+            <button 
+              onClick={toggleVoiceMode}
+              style={{ background: theme.cardBg, color: isVoiceEnabled ? '#3b82f6' : theme.subText, border: `1px solid ${theme.border}`, borderRadius: 8, padding: '8px', fontWeight: 700, fontSize: 12, cursor: 'pointer', boxShadow: '0 2px 6px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+            >
+              {isVoiceEnabled ? '🔊 Voice ON' : '🔇 Voice OFF'}
+            </button>
+          </div>
           
           <Map
             ref={mapRef}
             mapLib={maplibregl}
             initialViewState={viewState}
-            mapStyle={`https://basemaps.cartocdn.com/gl/positron-gl-style/style.json`}
+            mapStyle={isDarkMode ? `https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json` : `https://basemaps.cartocdn.com/gl/positron-gl-style/style.json`}
           >
             <NavigationControl position="bottom-right" />
             
