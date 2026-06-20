@@ -963,23 +963,33 @@ router.post('/webhook/whatsapp', async (req, res) => {
             
             const { account, error } = await resolveAccount({});
             if (!error && account) {
-              const welcomeText = "✨ *Welcome to Meenzy Fresh Catch!* 🌊🦞\n\nBrowse our full catalog and place your order directly on our website:\n🐟 https://www.meenzy.in/category/all-products\n\n💬 *Easy WhatsApp Ordering:*\n• *Text us:* Simply send the fish name and quantity (e.g., \"Seer fish 2kg\").\n• *Voice Orders:* Just send us a voice note with what you'd like!\n\n👨‍🍳 *Need Cooking Tips?*\nAsk us _\"how to cook my order\"_ or for recipe ideas, and our AI chef will help you out!";
+              const welcomeText = "✨ *Welcome to Meenzy Fresh Catch!* 🌊🦞\n\nHow would you like to proceed?";
+              const payload = {
+                type: "button",
+                body: { text: welcomeText },
+                action: {
+                  buttons: [
+                    { type: "reply", reply: { id: "GREET_AI", title: "🤖 AI Assistant" } },
+                    { type: "reply", reply: { id: "GREET_HUMAN", title: "🧑‍💼 Chat with Human" } }
+                  ]
+                }
+              };
 
               const localId = await insertPendingRow({
                 account,
                 toNumber: r.contact_number,
-                messageType: 'text',
-                messageBody: '✨ Welcome to Meenzy Fresh Catch! Sent website links.',
+                messageType: 'interactive',
+                messageBody: 'Welcome Greeting Options',
               });
               await enqueueSend({
-                kind: 'text',
+                kind: 'interactive',
                 accountId: account.id,
                 to: String(r.contact_number).replace(/\D/g, ''),
                 localMessageId: localId,
-                payload: { body: welcomeText, previewUrl: true },
+                payload: { interactive: payload },
               });
               
-              console.log(`[meenzy-welcome] Successfully enqueued welcome text response with links for: ${r.contact_number}`);
+              console.log(`[meenzy-welcome] Successfully enqueued welcome interactive buttons for: ${r.contact_number}`);
             }
             r.__handled = true;
           }
@@ -1000,6 +1010,31 @@ router.post('/webhook/whatsapp', async (req, res) => {
             // Map legacy inventory-failure options to resolution flow
             if (btnId === 'option_1_refund') btnId = 'resolution_refund_PREORDER';
             if (btnId === 'option_3_postpone') btnId = 'resolution_postpone_PREORDER';
+
+            // GREETING HANDLERS
+            if (btnId === 'GREET_HUMAN') {
+               await client.query(`
+                 UPDATE coexistence.contacts 
+                 SET tags = tags || '[{"id": 998, "name": "Human_Needed", "color": "#f59e0b"}]'::jsonb, 
+                     bot_paused_until = NOW() + INTERVAL '24 hours',
+                     updated_at = NOW()
+                 WHERE contact_number = $1
+               `, [r.contact_number]);
+               
+               const text = "I have paused automated responses. A human from our team will chat with you shortly! 🧑‍💼 (Type 'resume bot' anytime to wake me up)";
+               const localId = await insertPendingRow({ account, toNumber: r.contact_number, messageType: 'text', messageBody: text });
+               await enqueueSend({ kind: 'text', accountId: account.id, to: String(r.contact_number).replace(/\D/g, ''), localMessageId: localId, payload: { body: text, previewUrl: false } });
+               r.__handled = true;
+               continue;
+            }
+
+            if (btnId === 'GREET_AI') {
+               const text = "Hi! I am the Meenzy AI Assistant. 🐟✨\n\nI can help you check live prices, see our catalog, and place orders instantly!\n\nJust tell me what fish you're looking for, or reply with 'catalog' to see all our products.";
+               const localId = await insertPendingRow({ account, toNumber: r.contact_number, messageType: 'text', messageBody: text });
+               await enqueueSend({ kind: 'text', accountId: account.id, to: String(r.contact_number).replace(/\D/g, ''), localMessageId: localId, payload: { body: text, previewUrl: false } });
+               r.__handled = true;
+               continue;
+            }
 
             // New: Cancellation & Resolution Flow
             if (
