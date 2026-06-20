@@ -110,6 +110,21 @@ router.post('/:wixOrderId/instructions', async (req, res) => {
       [instructions, order.id]
     );
 
+    // Emit live update to Agent Portal
+    try {
+      const io = require('../socket').getIO();
+      if (io) {
+        io.to('delivery-agents').emit('order_instruction_updated', {
+          orderId: order.id,
+          wixOrderId: wixOrderId,
+          instructions: instructions
+        });
+        console.log(`[TrackingAPI] Emitted live instruction update for order ${order.id}`);
+      }
+    } catch(e) {
+      console.warn('[TrackingAPI] Failed to emit instruction socket event:', e.message);
+    }
+
     res.json({ ok: true });
   } catch (err) {
     console.error('[TrackingAPI] Error saving instructions:', err.message);

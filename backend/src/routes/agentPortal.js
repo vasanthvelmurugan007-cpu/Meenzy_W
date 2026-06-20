@@ -40,7 +40,7 @@ router.get('/:agentId/orders', verifyAgent, async (req, res) => {
   const { agentId } = req.params;
   try {
     const { rows: orders } = await pool.query(`
-      SELECT o.id, o.wix_order_id, o.user_phone, o.total_price, o.status, o.address_line, o.lat, o.lng, o.created_at, o.payment_status,
+      SELECT o.id, o.wix_order_id, o.user_phone, o.total_price, o.status, o.address_line, o.lat, o.lng, o.created_at, o.payment_status, o.delivery_instructions,
              (SELECT c.name FROM coexistence.contacts c WHERE RIGHT(regexp_replace(c.contact_number, '\\D', '', 'g'), 10) = RIGHT(regexp_replace(o.user_phone, '\\D', '', 'g'), 10) ORDER BY c.updated_at DESC LIMIT 1) as customer_name,
              COALESCE(
                json_agg(
@@ -104,7 +104,7 @@ router.get('/available-orders', verifyAgent, async (req, res) => {
   try {
     // Orders that have no agent assigned and are either PACKED or VERIFIED_READY (ready to be picked up)
     const { rows: orders } = await pool.query(`
-      SELECT o.id, o.wix_order_id, o.user_phone, o.total_price, o.status, o.address_line, o.lat, o.lng, o.created_at, o.payment_status,
+      SELECT o.id, o.wix_order_id, o.user_phone, o.total_price, o.status, o.address_line, o.lat, o.lng, o.created_at, o.payment_status, o.delivery_instructions,
              (SELECT c.name FROM coexistence.contacts c WHERE RIGHT(regexp_replace(c.contact_number, '\\D', '', 'g'), 10) = RIGHT(regexp_replace(o.user_phone, '\\D', '', 'g'), 10) ORDER BY c.updated_at DESC LIMIT 1) as customer_name,
              COALESCE(
                json_agg(

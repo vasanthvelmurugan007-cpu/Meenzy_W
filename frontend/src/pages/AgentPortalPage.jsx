@@ -309,6 +309,16 @@ export default function AgentPortalPage() {
         });
       });
 
+      socket.on('order_instruction_updated', (data) => {
+        console.log('[AgentPortal] Live instruction update:', data);
+        setOrders(prev => prev.map(o => {
+          if (o.id === data.orderId || o.wix_order_id === data.wixOrderId) {
+            return { ...o, delivery_instructions: data.instructions };
+          }
+          return o;
+        }));
+      });
+
       return () => {
         socket.disconnect();
       };
@@ -987,12 +997,19 @@ export default function AgentPortalPage() {
                 <div style={{ background: theme.accentBg, padding: 12, borderRadius: 8, marginBottom: 16, border: `1px solid ${theme.border}` }}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
                     <MapPin size={18} color="#ef4444" style={{ marginTop: 2 }} />
-                    <div>
+                    <div style={{ width: '100%' }}>
                       <div style={{ fontSize: 14, fontWeight: 600, color: theme.text, marginBottom: 4 }}>Delivery Address</div>
                       <div style={{ fontSize: 14, color: theme.subText, lineHeight: 1.5 }}>
                         {order.address_line}
                         {!order.lat && <span style={{ display: 'block', color: '#f59e0b', fontSize: 12, marginTop: 4 }}>⚠️ Exact GPS location not found</span>}
                       </div>
+                      
+                      {order.delivery_instructions && (
+                        <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${theme.border}` }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: '#f59e0b', textTransform: 'uppercase', marginBottom: 4 }}>⚠️ Delivery Instructions</div>
+                          <div style={{ fontSize: 14, color: theme.text, fontWeight: 600 }}>{order.delivery_instructions}</div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
