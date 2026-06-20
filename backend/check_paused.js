@@ -8,7 +8,7 @@ const client = new Client({
 
 async function run() {
   await client.connect();
-  const phone = '918072654406';
+  const phone = '919845444003';
   const res = await client.query('SELECT contact_number, bot_paused_until FROM coexistence.contacts WHERE contact_number = $1', [phone]);
   console.log('Current state:', res.rows);
   
