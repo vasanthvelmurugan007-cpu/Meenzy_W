@@ -297,13 +297,13 @@ async function finalizeCODOrder(whatsappId, account, context) {
     } catch (ecoErr) {
       await client.query('ROLLBACK TO SAVEPOINT check_eco');
       if (ecoErr.code === '42703') { // undefined_column
-        await client.query(`
+        const fallbackRes = await client.query(`
           INSERT INTO coexistence.ecosystem_orders 
           (user_phone, total_price, status, address_line, lat, lng)
           VALUES ($1, $2, 'CREATED', $3, $4, $5)
           RETURNING id
         `, [whatsappId, totalAmount, address, lat, lng]);
-        ecoOrderId = ecoRes.rows[0].id;
+        ecoOrderId = fallbackRes.rows[0].id;
       } else {
         throw ecoErr;
       }
