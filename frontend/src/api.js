@@ -357,6 +357,11 @@ export const api = {
       headers: { 'Authorization': `Bearer ${token}` },
       body: JSON.stringify(data)
     }),
+    olaRouting: (data, token) => req(`/agent/ola-routing`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify(data)
+    }),
     getStats: (agentId, token) =>
       req(`/agent/${agentId}/stats`, { headers: { Authorization: `Bearer ${token}` } }),
     updateLocation: (agentId, lat, lng, token) => req(`/agent/${agentId}/location`, {

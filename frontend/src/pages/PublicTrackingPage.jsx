@@ -66,11 +66,15 @@ export default function PublicTrackingPage() {
 
   // Fetch route when coordinates are available
   useEffect(() => {
-    if (orderData && orderData.agent?.lat && orderData.agent?.lng && orderData.lat && orderData.lng && mapToken) {
+    if (orderData && orderData.agent?.lat && orderData.agent?.lng && orderData.lat && orderData.lng) {
       const origin = `${orderData.agent.lat},${orderData.agent.lng}`;
       const destination = `${orderData.lat},${orderData.lng}`;
       
-      fetch(`https://api.olamaps.io/routing/v1/directions?origin=${origin}&destination=${destination}&api_key=${mapToken}`, { method: 'POST' })
+      fetch(`/api/public/ola-routing`, { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ origin, destination })
+      })
         .then(r => r.json())
         .then(data => {
           if (data.status === 'SUCCESS' && data.routes && data.routes.length > 0) {
@@ -82,7 +86,7 @@ export default function PublicTrackingPage() {
         })
         .catch(console.error);
     }
-  }, [orderData?.agent?.lat, orderData?.agent?.lng, orderData?.lat, orderData?.lng, mapToken]);
+  }, [orderData?.agent?.lat, orderData?.agent?.lng, orderData?.lat, orderData?.lng]);
 
   if (loading) return <div style={{ padding: 40, textAlign: 'center', fontFamily: FONT }}>Loading your live delivery status...</div>;
   if (error) return <div style={{ padding: 40, textAlign: 'center', fontFamily: FONT, color: 'red' }}>{error}</div>;

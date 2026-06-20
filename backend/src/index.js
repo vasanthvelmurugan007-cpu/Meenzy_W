@@ -141,6 +141,23 @@ app.get('/api/run-geocode-fix', async (req, res) => {
   }
 });
 
+// Public routing proxy for tracking page
+app.post('/api/public/ola-routing', async (req, res) => {
+  const { origin, destination, waypoints } = req.body;
+  if (!origin || !destination) return res.status(400).json({ error: 'Origin and destination are required' });
+  try {
+    const olaMapsService = require('./services/olaMapsService');
+    const routeData = await olaMapsService.getRoute(origin, destination, waypoints);
+    if (!routeData) {
+      return res.status(500).json({ error: 'Failed to fetch route from Ola Maps' });
+    }
+    res.json(routeData);
+  } catch (err) {
+    console.error('[PublicRouting] Error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Public routes (webhook from n8n / Razorpay — no auth)
 app.use('/api', webhookRouter);
 app.use('/api/webhook/razorpay', razorpayWebhookRouter);

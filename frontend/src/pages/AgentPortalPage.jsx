@@ -407,15 +407,17 @@ export default function AgentPortalPage() {
       if (stops.length < 2) return; // Need at least a start and an end
 
       try {
-        const olaMapsToken = import.meta.env.VITE_OLA_MAPS_KEY || import.meta.env.VITE_MAPBOX_TOKEN;
         const origin = stops[0].split(',').reverse().join(','); // lat,lng
         const destination = stops[stops.length-1].split(',').reverse().join(',');
         const waypoints = stops.slice(1, -1).map(s => s.split(',').reverse().join(',')).join('|');
         
-        const url = `https://api.olamaps.io/routing/v1/directions?origin=${origin}&destination=${destination}${waypoints ? `&waypoints=${waypoints}` : ''}&api_key=${olaMapsToken}&steps=true&alternatives=true`;
+        const res = await api.agentPortal.olaRouting({
+          origin,
+          destination,
+          waypoints: waypoints || undefined
+        }, agentToken);
         
-        const res = await fetch(url, { method: 'POST', headers: { 'X-Request-Id': Date.now().toString() } });
-        const data = await res.json();
+        const data = res;
         
         if (data.status === 'SUCCESS' && data.routes && data.routes.length > 0) {
           // Normalize Ola Maps response to match our expected format

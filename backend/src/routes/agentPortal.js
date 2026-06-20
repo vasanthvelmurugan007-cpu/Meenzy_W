@@ -61,6 +61,24 @@ router.get('/:agentId/orders', verifyAgent, async (req, res) => {
   }
 });
 
+// POST proxy for Ola Maps Routing API
+router.post('/ola-routing', verifyAgent, async (req, res) => {
+  const { origin, destination, waypoints } = req.body;
+  if (!origin || !destination) return res.status(400).json({ error: 'Origin and destination are required' });
+  
+  try {
+    const olaMapsService = require('../services/olaMapsService');
+    const routeData = await olaMapsService.getRoute(origin, destination, waypoints);
+    if (!routeData) {
+      return res.status(500).json({ error: 'Failed to fetch route from Ola Maps' });
+    }
+    res.json(routeData);
+  } catch (err) {
+    console.error('[AgentPortal] Routing Error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // PUT update agent location
 router.put('/:agentId/location', verifyAgent, async (req, res) => {
   const { agentId } = req.params;
