@@ -340,8 +340,32 @@ async function confirmOrder(orderId, trackingNumber = null) {
     // 7. Send Follow-up Text Message with OTP and Tracking Link
     const trackingPhone = String(order.customer_phone).replace(/\D/g, '').slice(-4);
     const trackingLink = `${process.env.CORS_ORIGIN || 'https://meenzy-frontend.onrender.com'}/#/track/${ecosystemOrderId}?phone=${trackingPhone}`;
-    const otpMsg = `🔒 *Your Delivery OTP:* ${otp}\n\n📍 *Track your order live here:*\n${trackingLink}\n\nPlease share this OTP with the delivery agent when they arrive!`;
-    await sendMetaTextMessage(order.customer_phone, otpMsg);
+    const otpMsg = `🔒 *Your Delivery OTP:* ${otp}\n\n📍 *Track your order live here:*\n${trackingLink}\n\nPlease share this OTP with the delivery agent when they arrive!\n\n(If you need to make changes, you can cancel your order before dispatch.)`;
+    
+    const interactivePayload = {
+      type: "button",
+      body: { text: otpMsg },
+      action: {
+        buttons: [
+          { type: "reply", reply: { id: `cancel_wix_order_${ecosystemOrderId}`, title: "Cancel Order ❌" } }
+        ]
+      }
+    };
+    
+    const localId = await insertPendingRow({
+      account,
+      toNumber: order.customer_phone,
+      messageType: 'interactive',
+      messageBody: `Sent confirmation with OTP for ${ecosystemOrderId}`,
+    });
+    
+    await enqueueSend({
+      kind: 'interactive',
+      accountId: account.id,
+      to: String(order.customer_phone).replace(/\D/g, ''),
+      localMessageId: localId,
+      payload: { interactive: interactivePayload },
+    });
     
     return { ok: true, wamid, receiptSummary, trackingId, otp };
   } catch (err) {
@@ -715,9 +739,33 @@ router.post('/meenzy/inventory-confirm', async (req, res) => {
           }
         });
 
-        // Send a follow-up text with OTP and tracking link
-        const otpMsg = `🔒 *Your Delivery OTP:* ${otp}\n\n📍 *Track your order live here:*\n${trackingLink}\n\nPlease share this OTP with the delivery agent when they arrive!`;
-        await sendMetaTextMessage(customer_phone, otpMsg);
+        // Send a follow-up interactive message with OTP, tracking link, and Cancel button
+        const otpMsg = `🔒 *Your Delivery OTP:* ${otp}\n\n📍 *Track your order live here:*\n${trackingLink}\n\nPlease share this OTP with the delivery agent when they arrive!\n\n(If you need to make changes, you can cancel your order before dispatch.)`;
+        
+        const interactivePayload = {
+          type: "button",
+          body: { text: otpMsg },
+          action: {
+            buttons: [
+              { type: "reply", reply: { id: `cancel_wix_order_${o.id}`, title: "Cancel Order ❌" } }
+            ]
+          }
+        };
+        
+        const localId2 = await insertPendingRow({
+          account,
+          toNumber: customer_phone,
+          messageType: 'interactive',
+          messageBody: `Sent confirmation with OTP for ${o.id}`,
+        });
+        
+        await enqueueSend({
+          kind: 'interactive',
+          accountId: account.id,
+          to: String(customer_phone).replace(/\D/g, ''),
+          localMessageId: localId2,
+          payload: { interactive: interactivePayload },
+        });
       }
 
       alertCount++;
