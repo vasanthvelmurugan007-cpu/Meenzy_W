@@ -17,7 +17,7 @@ router.get('/:wixOrderId', async (req, res) => {
 
   try {
     const { rows: orders } = await pool.query(`
-      SELECT o.id, o.wix_order_id, o.user_phone, o.total_price, o.status, o.address_line, o.created_at, o.assigned_agent_id, o.delivery_instructions,
+      SELECT o.id, o.wix_order_id, o.user_phone, o.total_price, o.status, o.address_line, o.created_at, o.assigned_agent_id, o.delivery_instructions, o.lat, o.lng,
              a.name as agent_name, a.vehicle_info as agent_vehicle, a.last_lat as agent_lat, a.last_lng as agent_lng, a.phone as agent_phone,
              COALESCE(
                json_agg(
@@ -57,6 +57,8 @@ router.get('/:wixOrderId', async (req, res) => {
         status: order.status,
         created_at: order.created_at,
         address: order.address_line,
+        lat: order.lat,
+        lng: order.lng,
         phone: maskedPhone,
         total_price: order.total_price,
         items: order.items,
