@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { api } from '../api';
-import { Package, CheckCircle, MapPin, Phone, CreditCard, Clock, LogIn, Navigation, ArrowRight, Sparkles, Moon, Sun, Camera, Trash2 } from 'lucide-react';
+import { Package, CheckCircle, MapPin, Phone, CreditCard, Clock, LogIn, LogOut, Navigation, ArrowRight, Sparkles, Moon, Sun, Camera, Trash2 } from 'lucide-react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import Map, { Marker, NavigationControl, Source, Layer } from 'react-map-gl/maplibre';
