@@ -420,7 +420,7 @@ export default function AgentPortalPage() {
         if (data.status === 'SUCCESS' && data.routes && data.routes.length > 0) {
           // Normalize Ola Maps response to match our expected format
           const normalizedRoutes = data.routes.map(r => ({
-            geometry: { coordinates: decodePolyline(r.overview_polyline) },
+            geometry: { type: 'LineString', coordinates: decodePolyline(r.overview_polyline) },
             legs: r.legs || [],
             duration: (r.legs || []).reduce((acc, l) => acc + l.duration, 0)
           }));
