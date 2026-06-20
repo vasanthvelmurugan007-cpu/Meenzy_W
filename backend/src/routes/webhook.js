@@ -975,46 +975,6 @@ router.post('/webhook/whatsapp', async (req, res) => {
             }
             r.__handled = true;
           }
-
-          if (trimmedBody.startsWith('send me updates for my recent order') && !r.__handled) {
-            console.log(`[order-updates] Customer requested updates: ${r.contact_number}`);
-            
-            const { resolveAccount, insertPendingRow } = require('../services/messageSender');
-            const { enqueueSend } = require('../queue/sendQueue');
-            
-            const { account, error } = await resolveAccount({});
-            if (!error && account) {
-              // Try to find recent order
-              const orderRes = await client.query(`
-                SELECT id, wix_order_id, total_price 
-                FROM coexistence.meenzy_preorders 
-                WHERE customer_phone = $1 
-                ORDER BY created_at DESC LIMIT 1`, [r.contact_number]);
-              
-              let replyText = "🎉 *Updates Activated!*\n\nThank you for opting in to receive order updates via WhatsApp. We will notify you here once your order is dispatched for delivery!";
-              
-              if (orderRes.rows.length > 0) {
-                const order = orderRes.rows[0];
-                const orderIdDisplay = order.wix_order_id || String(order.id).split('-')[0].toUpperCase();
-                replyText = `🎉 *Order Confirmed!*\n\nThank you for shopping with Meenzy. We have successfully received your order ${orderIdDisplay}.\n\nYour total is ₹${order.total_price}. We will notify you once it is dispatched for delivery!`;
-              }
-
-              const localId = await insertPendingRow({
-                account,
-                toNumber: r.contact_number,
-                messageType: 'text',
-                messageBody: 'Order confirmation / Update activation',
-              });
-              await enqueueSend({
-                kind: 'text',
-                accountId: account.id,
-                to: String(r.contact_number).replace(/\D/g, ''),
-                localMessageId: localId,
-                payload: { body: replyText, previewUrl: false },
-              });
-            }
-            r.__handled = true;
-          }
         }
 
 
