@@ -228,12 +228,15 @@ async function start() {
   try {
     await pool.query(`ALTER TABLE coexistence.meenzy_preorders ADD COLUMN IF NOT EXISTS feedback_sent BOOLEAN DEFAULT false;`);
     await pool.query(`ALTER TABLE coexistence.meenzy_preorders ADD COLUMN IF NOT EXISTS otp TEXT;`);
+    await pool.query(`ALTER TABLE coexistence.meenzy_preorders ADD COLUMN IF NOT EXISTS payment_status VARCHAR(50) DEFAULT 'UNKNOWN';`);
     await pool.query(`ALTER TABLE coexistence.ecosystem_orders ADD COLUMN IF NOT EXISTS notes TEXT;`);
     await pool.query(`ALTER TABLE coexistence.ecosystem_orders ADD COLUMN IF NOT EXISTS delivery_instructions TEXT;`);
     await pool.query(`ALTER TABLE coexistence.ecosystem_orders ADD COLUMN IF NOT EXISTS pod_image_url TEXT;`);
+    await pool.query(`ALTER TABLE coexistence.ecosystem_orders ADD COLUMN IF NOT EXISTS feedback_sent BOOLEAN DEFAULT false;`);
     await pool.query(`ALTER TABLE coexistence.ecosystem_order_items ALTER COLUMN quantity TYPE NUMERIC(10,2);`);
     await pool.query(`ALTER TABLE coexistence.delivery_agents ADD COLUMN IF NOT EXISTS plain_pin VARCHAR(255);`);
     await pool.query(`ALTER TABLE coexistence.contacts ADD COLUMN IF NOT EXISTS meenzy_coins INT DEFAULT 0;`);
+    await pool.query(`ALTER TYPE coexistence.user_state ADD VALUE IF NOT EXISTS 'COMPLETED';`);
   } catch(e) { console.error('Failed to add schema columns:', e); }
 
   startFeedbackCron();
