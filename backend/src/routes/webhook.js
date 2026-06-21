@@ -1997,20 +1997,26 @@ router.post('/webhook/wix-order', async (req, res) => {
     const lat = geo ? geo.lat : null;
     const lng = geo ? geo.lng : null;
 
-    // 4. Save to Database with newly generated OTP
+    // 4. Save to Database with newly generated OTP and custom Display ID
     const otp = Math.floor(1000 + Math.random() * 9000).toString();
     const paymentStatusRaw = order.paymentStatus || 'UNKNOWN';
     const paymentMethod = order.billingInfo?.paymentMethod || '';
     const finalPaymentStatus = (paymentStatusRaw === 'PAID' || paymentStatusRaw === 'FULLY_PAID') ? 'PAID' : 'COD';
 
+    // Generate Display ID: First 2 letters of first product + 4 random digits
+    const firstProductName = lineItems[0] ? (lineItems[0].itemName || lineItems[0].name || lineItems[0].title || 'Unknown') : 'Unknown';
+    const prefix = firstProductName.replace(/[^a-zA-Z]/g, '').substring(0, 2).toUpperCase() || 'MZ';
+    const randomSuffix = Math.floor(1000 + Math.random() * 9000).toString();
+    const displayId = `${prefix}${randomSuffix}`;
+
     let savedOrder;
     try {
       await client.query('SAVEPOINT eco_check');
       const res = await client.query(`
-        INSERT INTO coexistence.ecosystem_orders (wix_order_id, user_phone, total_price, status, address_line, lat, lng, delivery_otp, payment_status)
-        VALUES ($1, $2, $3, 'CREATED', $4, $5, $6, $7, $8)
+        INSERT INTO coexistence.ecosystem_orders (wix_order_id, user_phone, total_price, status, address_line, lat, lng, delivery_otp, payment_status, display_id)
+        VALUES ($1, $2, $3, 'CREATED', $4, $5, $6, $7, $8, $9)
         RETURNING id
-      `, [String(orderId), String(phone), total, addressLine, lat, lng, otp, finalPaymentStatus]);
+      `, [String(orderId), String(phone), total, addressLine, lat, lng, otp, finalPaymentStatus, displayId]);
       savedOrder = res.rows;
       await client.query('RELEASE SAVEPOINT eco_check');
     } catch (insertErr) {
@@ -2022,6 +2028,8 @@ router.post('/webhook/wix-order', async (req, res) => {
           RETURNING id
         `, [String(orderId), String(phone), total, addressLine, lat, lng, otp]);
         savedOrder = res.rows;
+        // Best effort update since column didn't exist in original insert
+        try { await client.query(`UPDATE coexistence.ecosystem_orders SET display_id = $1 WHERE id = $2`, [displayId, savedOrder[0].id]); } catch(e){}
       } else {
         throw insertErr;
       }
@@ -2044,9 +2052,9 @@ router.post('/webhook/wix-order', async (req, res) => {
       try {
         await client.query('SAVEPOINT preorders_check');
         await client.query(`
-          INSERT INTO coexistence.meenzy_preorders (customer_phone, ordered_item, quantity, order_status, otp, payment_status)
-          VALUES ($1, $2, $3, 'pending_market', $4, $5)
-        `, [String(phone).replace(/\D/g, ''), name, qty, otp, finalPaymentStatus]);
+          INSERT INTO coexistence.meenzy_preorders (customer_phone, ordered_item, quantity, order_status, otp, payment_status, display_id)
+          VALUES ($1, $2, $3, 'pending_market', $4, $5, $6)
+        `, [String(phone).replace(/\D/g, ''), name, qty, otp, finalPaymentStatus, displayId]);
         await client.query('RELEASE SAVEPOINT preorders_check');
       } catch (insertErr) {
         await client.query('ROLLBACK TO SAVEPOINT preorders_check');
@@ -2055,6 +2063,7 @@ router.post('/webhook/wix-order', async (req, res) => {
             INSERT INTO coexistence.meenzy_preorders (customer_phone, ordered_item, quantity, order_status, otp)
             VALUES ($1, $2, $3, 'pending_market', $4)
           `, [String(phone).replace(/\D/g, ''), name, qty, otp]);
+          try { await client.query(`UPDATE coexistence.meenzy_preorders SET display_id = $1 WHERE customer_phone = $2 AND ordered_item = $3 AND otp = $4`, [displayId, String(phone).replace(/\D/g, ''), name, otp]); } catch(e){}
         } else {
           throw insertErr;
         }
@@ -2123,7 +2132,7 @@ router.post('/webhook/wix-order', async (req, res) => {
         // New order costs LESS
         const saved = Math.abs(diff);
         messageText =
-          `🔄 *Swap Order Detected!* 🌊 (Order #${orderId})\n\n` +
+          `🔄 *Swap Order Detected!* 🌊 (Order #${displayId})\n\n` +
           `It looks like you've changed your order from *${prevItem}* (₹${prevTotal}) to a new selection.\n\n` +
           `*New Order:*\n${itemsSummary.join('\n')}\n\n` +
           `📊 *Price Comparison:*\n` +
@@ -2135,14 +2144,13 @@ router.post('/webhook/wix-order', async (req, res) => {
       } else {
         // Same price
         messageText =
-          `🔄 *Swap Order Detected!* 🌊 (Order #${orderId})\n\n` +
+          `🔄 *Swap Order Detected!* 🌊 (Order #${displayId})\n\n` +
           `It looks like you've changed your order from *${prevItem}* (₹${prevTotal}) to a new selection.\n\n` +
           `*New Order:*\n${itemsSummary.join('\n')}\n\n` +
           `✅ *Same total — no extra charge!*\n\n` +
           `📍 *Track your order live:*\n${trackingLink}`;
       }
 
-      // Mark the old preorder as SWAPPED so it won't be detected again
       try {
         await client.query(
           `UPDATE coexistence.meenzy_preorders SET order_status = 'SWAPPED' WHERE id = $1`,
@@ -2153,7 +2161,7 @@ router.post('/webhook/wix-order', async (req, res) => {
       console.log(`[wix-order-webhook] Swap detected for ${normalizedPhone}: prev=${prevItem}(₹${prevTotal}) → new=₹${newTotal}, diff=₹${diff}`);
     } else {
       // Normal new order — no previous cancelled order found
-      messageText = `The order is confirmed. Thank you for ordering! 🌊 (Order #${orderId})\n\nBecause we source our seafood fresh daily, your order is currently marked as a *Preorder*.\n\n*Requested Items:*\n${itemsSummary.join('\n')}\n\n💵 *Total:* ₹${total}\n\n📍 *Track your order live:*\n${trackingLink}`;
+      messageText = `The order is confirmed. Thank you for ordering! 🌊 (Order #${displayId})\n\nBecause we source our seafood fresh daily, your order is currently marked as a *Preorder*.\n\n*Requested Items:*\n${itemsSummary.join('\n')}\n\n💵 *Total:* ₹${total}\n\n📍 *Track your order live:*\n${trackingLink}`;
     }
 
     const { resolveAccount, insertPendingRow } = require('../services/messageSender');
@@ -2183,7 +2191,7 @@ router.post('/webhook/wix-order', async (req, res) => {
               type: 'body',
               parameters: [
                 { type: 'text', text: String(order.buyerInfo?.firstName || order.billingInfo?.contactDetails?.firstName || 'Customer') },
-                { type: 'text', text: `ORD-${orderId}` },
+                { type: 'text', text: String(displayId) },
                 { type: 'text', text: String(total) }
               ]
             }

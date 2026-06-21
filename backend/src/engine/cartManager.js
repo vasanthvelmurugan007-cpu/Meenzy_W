@@ -206,17 +206,18 @@ async function checkoutCart(whatsappId, account) {
     const res = await client.query(`SELECT * FROM coexistence.meenzy_carts WHERE whatsapp_id = $1 AND status = 'active' FOR UPDATE`, [whatsappId]);
     if (res.rows.length === 0 || res.rows[0].cart_items.length === 0) throw new Error('No active cart found');
     const cart = res.rows[0];
-    
-    // Create Preorder
-    const orderId = 'MNZ-' + Math.floor(1000 + Math.random() * 9000);
-    const totalAmt = cart.cart_items.reduce((sum, item) => sum + (item.quantity * item.price_per_kg), 0);
+    // Generate Display ID: First 2 letters of first product + 4 random digits
+    const firstProductName = cart.cart_items[0] ? cart.cart_items[0].base_name : 'Unknown';
+    const prefix = firstProductName.replace(/[^a-zA-Z]/g, '').substring(0, 2).toUpperCase() || 'MZ';
+    const randomSuffix = Math.floor(1000 + Math.random() * 9000).toString();
+    const displayId = `${prefix}${randomSuffix}`;
     
     // Insert items into meenzy_preorders
     for (const item of cart.cart_items) {
       await client.query(
-        `INSERT INTO coexistence.meenzy_preorders (customer_phone, ordered_item, quantity, order_status)
-         VALUES ($1, $2, $3, 'AWAITING_DELIVERY_PREF')`,
-        [whatsappId, item.base_name, item.quantity]
+        `INSERT INTO coexistence.meenzy_preorders (customer_phone, ordered_item, quantity, order_status, display_id)
+         VALUES ($1, $2, $3, 'AWAITING_DELIVERY_PREF', $4)`,
+        [whatsappId, item.base_name, item.quantity, displayId]
       );
     }
     

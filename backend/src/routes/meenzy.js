@@ -6,6 +6,35 @@ const { getSingleAccount } = require('./whatsappAccounts');
 
 const router = Router();
 
+router.get('/meenzy/run-migration', async (req, res) => {
+  try {
+    const pool = require('../db');
+    await pool.query(`ALTER TABLE coexistence.ecosystem_orders ADD COLUMN IF NOT EXISTS display_id VARCHAR(50);`);
+    await pool.query(`ALTER TABLE coexistence.meenzy_preorders ADD COLUMN IF NOT EXISTS display_id VARCHAR(50);`);
+    
+    await pool.query(`
+      UPDATE coexistence.ecosystem_orders 
+      SET display_id = 'OLD' || floor(random() * 90000 + 10000)::text 
+      WHERE display_id IS NULL;
+    `);
+    await pool.query(`
+      UPDATE coexistence.meenzy_preorders 
+      SET display_id = 'OLD' || floor(random() * 90000 + 10000)::text 
+      WHERE display_id IS NULL;
+    `);
+
+    try {
+      await pool.query(`ALTER TABLE coexistence.ecosystem_orders ADD CONSTRAINT uq_ecosystem_orders_display_id UNIQUE (display_id);`);
+    } catch(e) {}
+    try {
+      await pool.query(`ALTER TABLE coexistence.meenzy_preorders ADD CONSTRAINT uq_meenzy_preorders_display_id UNIQUE (display_id);`);
+    } catch(e) {}
+
+    res.send('Migration done!');
+  } catch(e) {
+    res.status(500).send(e.message);
+  }
+});
 // Helper function to send outbound WhatsApp text messages directly to Meta Cloud API v20.0
 async function sendMetaTextMessage(toNumber, text) {
   try {
@@ -170,7 +199,8 @@ async function confirmOrder(orderId, trackingNumber = null) {
   try {
     // 1. Fetch preorder details
     const orderRes = await pool.query(
-      `SELECT customer_phone, ordered_item, quantity, driver_id, address_line FROM coexistence.meenzy_preorders WHERE id = $1`,
+      `SELECT id, customer_phone, ordered_item, quantity, order_status, created_at, display_id
+       FROM coexistence.meenzy_preorders WHERE id = $1`,
       [orderId]
     );
     if (orderRes.rows.length === 0) {
@@ -280,9 +310,10 @@ async function confirmOrder(orderId, trackingNumber = null) {
     }
     
     // 7. Send Follow-up Text Message with OTP and Tracking Link
+    const displayId = order.display_id || trackingNumber || wixOrderId.split('-')[0].slice(0, 8);
     const trackingPhone = String(order.customer_phone).replace(/\D/g, '').slice(-4);
     const trackingLink = `${process.env.CORS_ORIGIN || 'https://meenzy-frontend.onrender.com'}/#/track/${ecosystemOrderId}?phone=${trackingPhone}`;
-    const otpMsg = `🔒 *Your Delivery OTP:* ${otp}\n\n📍 *Track your order live here:*\n${trackingLink}\n\nPlease share this OTP with the delivery agent when they arrive!\n\n(If you need to make changes, you can cancel your order before dispatch.)`;
+    const otpMsg = `✅ *Order ${displayId} Confirmed!*\n\n🔒 *Your Delivery OTP:* ${otp}\n\n📍 *Track your order live here:*\n${trackingLink}\n\nPlease share this OTP with the delivery agent when they arrive!\n\n(If you need to make changes, you can cancel your order before dispatch.)`;
     
     const interactivePayload = {
       type: "button",
@@ -641,11 +672,11 @@ router.post('/meenzy/inventory-confirm', async (req, res) => {
         await pool.query(`UPDATE coexistence.ecosystem_orders SET delivery_otp = $1 WHERE id = $2`, [otp, o.id]);
         await pool.query(`UPDATE coexistence.meenzy_preorders SET otp = $1 WHERE customer_phone = $2 AND ordered_item ILIKE $3`, [otp, customer_phone, `%${ordered_item}%`]);
         
+        const displayId = o.display_id || String(displayOrderId).split('-')[0].slice(0, 8);
         const receiptSummary = `${ordered_item} - Secured from catch | Total: ₹${o.total_price}`;
-        const trackingId = String(displayOrderId).split('-')[0].slice(0, 8);
 
         // Send a follow-up interactive message with OTP, tracking link, and Cancel button
-        const otpMsg = `🔒 *Your Delivery OTP:* ${otp}\n\n📍 *Track your order live here:*\n${trackingLink}\n\nPlease share this OTP with the delivery agent when they arrive!\n\n(If you need to make changes, you can cancel your order before dispatch.)`;
+        const otpMsg = `✅ *Order ${displayId} Confirmed!*\n\n🔒 *Your Delivery OTP:* ${otp}\n\n📍 *Track your order live here:*\n${trackingLink}\n\nPlease share this OTP with the delivery agent when they arrive!\n\n(If you need to make changes, you can cancel your order before dispatch.)`;
         
         const interactivePayload = {
           type: "button",
@@ -1112,8 +1143,10 @@ router.post('/meenzy/batch-agent/process', async (req, res) => {
         const trackingPhone = String(customerPhone).replace(/\D/g, '').slice(-4);
         const trackingLink = `${process.env.CORS_ORIGIN || 'https://meenzy-frontend.onrender.com'}/#/track/${order.id}?phone=${trackingPhone}`;
         
+        const displayId = order.display_id || order.id.toString();
+
         // Send a follow-up interactive message with OTP, tracking link, and Cancel button
-        const otpMsg = `🔒 *Your Delivery OTP:* ${otp}\n\n📍 *Track your order live here:*\n${trackingLink}\n\nPlease share this OTP with the delivery agent when they arrive!\n\n(If you need to make changes, you can cancel your order before dispatch.)`;
+        const otpMsg = `✅ *Order ${displayId} Confirmed!*\n\n🔒 *Your Delivery OTP:* ${otp}\n\n📍 *Track your order live here:*\n${trackingLink}\n\nPlease share this OTP with the delivery agent when they arrive!\n\n(If you need to make changes, you can cancel your order before dispatch.)`;
         
         const interactivePayload = {
           type: "button",

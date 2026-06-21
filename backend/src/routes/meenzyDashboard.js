@@ -43,7 +43,7 @@ router.get('/meenzy/dashboard/stats', async (req, res) => {
     let recentOrders = [];
     try {
       const { rows } = await pool.query(`
-        SELECT p.id, p.customer_phone, p.ordered_item, p.quantity, p.order_status, p.created_at, a.name as driver_name,
+        SELECT p.id, p.display_id, p.customer_phone, p.ordered_item, p.quantity, p.order_status, p.created_at, a.name as driver_name,
                COALESCE(
                  (SELECT o.payment_status
                   FROM coexistence.ecosystem_orders o
@@ -63,7 +63,7 @@ router.get('/meenzy/dashboard/stats', async (req, res) => {
     } catch (colErr) {
       console.warn('payment_status column might be missing, falling back to original query');
       const { rows } = await pool.query(`
-        SELECT p.id, p.customer_phone, p.ordered_item, p.quantity, p.order_status, p.created_at, a.name as driver_name
+        SELECT p.id, p.display_id, p.customer_phone, p.ordered_item, p.quantity, p.order_status, p.created_at, a.name as driver_name
         FROM coexistence.meenzy_preorders p
         LEFT JOIN coexistence.meenzy_delivery_agents a ON p.driver_id = a.id
         ORDER BY p.created_at DESC
