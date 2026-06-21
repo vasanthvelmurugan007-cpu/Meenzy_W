@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { api } from '../api.js';
 import { C, FONT } from '../constants.js';
 import { ShoppingBag, AlertTriangle, RefreshCw, CheckCircle2, Calendar, FileText, Trash2, Megaphone } from 'lucide-react';
@@ -318,105 +318,130 @@ export default function PreordersPage() {
                       <th style={{ padding: '12px 20px' }}>Assign Agent</th>
                       <th style={{ padding: '12px 20px', textAlign: 'center' }}>Actions</th>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {preorders.map((order) => {
-                      const status = getStatusColor(order.order_status);
-                      return (
-                        <tr key={order.id} style={{ borderBottom: '1px solid #F1F5F9', transition: 'background 0.2s' }}>
-                          <td style={{ padding: '14px 20px', fontWeight: 600 }}>+{order.customer_phone}</td>
-                          <td style={{ padding: '14px 20px', color: '#334155', fontWeight: 500 }}>{order.ordered_item}</td>
-                          <td style={{ padding: '14px 20px', color: '#475569' }}>{parseFloat(order.quantity)} kg</td>
-                          <td style={{ padding: '14px 20px', color: '#64748B' }}>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <Calendar size={13} /> {new Date(order.delivery_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-                            </span>
-                          </td>
-                          <td style={{ padding: '14px 20px' }}>
-                            <span style={{ display: 'inline-block', padding: '4px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600, background: status.bg, color: status.text }}>
-                              {status.label}
-                            </span>
-                            {order.notes && (
-                              <div style={{ marginTop: 8, fontSize: 11, color: '#EF4444', fontStyle: 'italic', maxWidth: 150, wordWrap: 'break-word' }}>
-                                {order.notes}
-                              </div>
-                            )}
-                          </td>
-                          <td style={{ padding: '14px 20px' }}>
-                            <span style={{
-                              padding: '4px 8px', borderRadius: 4, fontSize: 11, fontWeight: 700,
-                              background: order.payment_status === 'PAID' ? '#dcfce7' : '#fee2e2',
-                              color: order.payment_status === 'PAID' ? '#16a34a' : '#ef4444'
-                            }}>
-                              {order.payment_status === 'PAID' ? 'ONLINE' : 'COD'}
-                            </span>
-                          </td>
-                          <td style={{ padding: '14px 20px' }}>
-                            <select
-                              value={order.driver_id || ''}
-                              onChange={(e) => handleAssignAgent(order.id, e.target.value)}
-                              disabled={assigningId === order.id}
-                              style={{
-                                padding: '6px 10px',
-                                borderRadius: 6,
-                                border: '1px solid #CBD5E1',
-                                background: '#F8FAFC',
-                                fontSize: 12,
-                                color: '#334155',
-                                cursor: 'pointer',
-                                outline: 'none'
-                              }}
-                            >
-                              <option value="">Unassigned</option>
-                              {agents.map(a => (
-                                <option key={a.id} value={a.id}>{a.name}</option>
-                              ))}
-                            </select>
-                          </td>
-                          <td style={{ padding: '14px 20px', textAlign: 'center' }}>
-                            <div style={{ display: 'flex', justifyContent: 'center', gap: 8 }}>
-                              {order.order_status !== 'confirmed' && (
-                                <button
-                                  onClick={async () => {
-                                    if (!window.confirm('Send WhatsApp confirmation and generate tracking link for this order?')) return;
-                                    try {
-                                      await api.meenzy.confirmOrder(order.id);
-                                      fetchData();
-                                    } catch(e) {
-                                      alert('Failed to confirm order');
-                                    }
-                                  }}
-                                  style={{ background: 'transparent', border: 'none', color: '#10B981', cursor: 'pointer', padding: 6, borderRadius: 6, transition: 'background 0.2s' }}
-                                  onMouseEnter={e => e.currentTarget.style.background = '#ECFDF5'}
-                                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                                  title="Confirm Order & Send Tracking"
-                                >
-                                  <CheckCircle2 size={15} />
-                                </button>
-                              )}
-                              <button
-                                onClick={() => handleDeleteOrder(order.id)}
-                                style={{
-                                  background: 'transparent',
-                                  border: 'none',
-                                  color: '#94A3B8',
-                                  cursor: 'pointer',
-                                  padding: 6,
-                                  borderRadius: 6,
-                                  transition: 'background 0.2s',
-                                }}
-                                onMouseEnter={e => e.currentTarget.style.background = '#FEF2F2'}
-                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                                title="Delete Order"
-                              >
-                                <Trash2 size={15} />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
+                  </thead                  <tbody>
+                    {(() => {
+                      const groupedList = [];
+                      const phoneToGroup = {};
+                      preorders.forEach(order => {
+                        const phone = order.customer_phone;
+                        if (!phoneToGroup[phone]) {
+                          phoneToGroup[phone] = [];
+                          groupedList.push({ phone, orders: phoneToGroup[phone] });
+                        }
+                        phoneToGroup[phone].push(order);
+                      });
+
+                      return groupedList.map(({ phone, orders }) => (
+                        <React.Fragment key={phone}>
+                          {orders.map((order, index) => {
+                            const status = getStatusColor(order.order_status);
+                            return (
+                              <tr key={order.id} style={{ borderBottom: index === orders.length - 1 ? '2px solid #CBD5E1' : '1px solid #F1F5F9', transition: 'background 0.2s' }}>
+                                {index === 0 && (
+                                  <td rowSpan={orders.length} style={{ padding: '14px 20px', verticalAlign: 'top', borderRight: '1px solid #E2E8F0', background: '#F8FAFC' }}>
+                                    <div style={{ fontWeight: 700, fontSize: 14, color: '#1E293B' }}>
+                                      {order.customer_name || 'Customer'}
+                                    </div>
+                                    <div style={{ fontSize: 12, color: '#64748B', marginTop: 4 }}>
+                                      +{phone}
+                                    </div>
+                                  </td>
+                                )}
+                                <td style={{ padding: '14px 20px', color: '#334155', fontWeight: 500 }}>{order.ordered_item}</td>
+                                <td style={{ padding: '14px 20px', color: '#475569' }}>{parseFloat(order.quantity)} kg</td>
+                                <td style={{ padding: '14px 20px', color: '#64748B' }}>
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    <Calendar size={13} /> {new Date(order.delivery_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                                  </span>
+                                </td>
+                                <td style={{ padding: '14px 20px' }}>
+                                  <span style={{ display: 'inline-block', padding: '4px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600, background: status.bg, color: status.text }}>
+                                    {status.label}
+                                  </span>
+                                  {order.notes && (
+                                    <div style={{ marginTop: 8, fontSize: 11, color: '#EF4444', fontStyle: 'italic', maxWidth: 150, wordWrap: 'break-word' }}>
+                                      {order.notes}
+                                    </div>
+                                  )}
+                                </td>
+                                <td style={{ padding: '14px 20px' }}>
+                                  <span style={{
+                                    padding: '4px 8px', borderRadius: 4, fontSize: 11, fontWeight: 700,
+                                    background: order.payment_status === 'PAID' ? '#dcfce7' : '#fee2e2',
+                                    color: order.payment_status === 'PAID' ? '#16a34a' : '#ef4444'
+                                  }}>
+                                    {order.payment_status === 'PAID' ? 'ONLINE' : 'COD'}
+                                  </span>
+                                </td>
+                                <td style={{ padding: '14px 20px' }}>
+                                  <select
+                                    value={order.driver_id || ''}
+                                    onChange={(e) => handleAssignAgent(order.id, e.target.value)}
+                                    disabled={assigningId === order.id}
+                                    style={{
+                                      padding: '6px 10px',
+                                      borderRadius: 6,
+                                      border: '1px solid #CBD5E1',
+                                      background: '#F8FAFC',
+                                      fontSize: 12,
+                                      color: '#334155',
+                                      cursor: 'pointer',
+                                      outline: 'none'
+                                    }}
+                                  >
+                                    <option value="">Unassigned</option>
+                                    {agents.map(a => (
+                                      <option key={a.id} value={a.id}>{a.name}</option>
+                                    ))}
+                                  </select>
+                                </td>
+                                <td style={{ padding: '14px 20px', textAlign: 'center' }}>
+                                  <div style={{ display: 'flex', justifyContent: 'center', gap: 8 }}>
+                                    {order.order_status !== 'confirmed' && (
+                                      <button
+                                        onClick={async () => {
+                                          if (!window.confirm('Send WhatsApp confirmation and generate tracking link for this order?')) return;
+                                          try {
+                                            await api.meenzy.confirmOrder(order.id);
+                                            fetchData();
+                                          } catch(e) {
+                                            alert('Failed to confirm order');
+                                          }
+                                        }}
+                                        style={{ background: 'transparent', border: 'none', color: '#10B981', cursor: 'pointer', padding: 6, borderRadius: 6, transition: 'background 0.2s' }}
+                                        onMouseEnter={e => e.currentTarget.style.background = '#ECFDF5'}
+                                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                        title="Confirm Order & Send Tracking"
+                                      >
+                                        <CheckCircle2 size={15} />
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={() => handleDeleteOrder(order.id)}
+                                      style={{
+                                        background: 'transparent',
+                                        border: 'none',
+                                        color: '#94A3B8',
+                                        cursor: 'pointer',
+                                        padding: 6,
+                                        borderRadius: 6,
+                                        transition: 'background 0.2s',
+                                      }}
+                                      onMouseEnter={e => e.currentTarget.style.background = '#FEF2F2'}
+                                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                      title="Delete Order"
+                                    >
+                                      <Trash2 size={15} />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </React.Fragment>
+                      ));
+                    })()}
+                  </tbody>y>
                 </table>
               </div>
             )}
