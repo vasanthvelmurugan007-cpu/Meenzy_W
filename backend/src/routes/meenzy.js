@@ -414,10 +414,10 @@ router.get('/meenzy/preorders', async (req, res) => {
   try {
     const preorders = await pool.query(
       `SELECT p.*,
-              (SELECT profile_name 
+              (SELECT COALESCE(name, profile_name) 
                FROM coexistence.contacts c 
-               WHERE RIGHT(regexp_replace(c.wa_id, '\\D', '', 'g'), 10) = RIGHT(regexp_replace(p.customer_phone, '\\D', '', 'g'), 10) 
-                 AND profile_name IS NOT NULL 
+               WHERE RIGHT(regexp_replace(c.contact_number, '\\D', '', 'g'), 10) = RIGHT(regexp_replace(p.customer_phone, '\\D', '', 'g'), 10) 
+                 AND COALESCE(name, profile_name) IS NOT NULL 
                LIMIT 1
               ) as customer_name,
               COALESCE(
