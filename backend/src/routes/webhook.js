@@ -2160,7 +2160,43 @@ router.post('/webhook/wix-order', async (req, res) => {
     const { enqueueSend } = require('../queue/sendQueue');
     const { account, error } = await resolveAccount({});
 
+    let templateName = process.env.ORDER_CONFIRM_TEMPLATE_NAME || null;
+    try {
+      const { rows } = await client.query(`SELECT value FROM coexistence.meenzy_settings WHERE key = 'wix_order_template'`);
+      if (rows.length > 0 && rows[0].value) templateName = rows[0].value;
+    } catch(e) {}
+
     if (!error && account) {
+      if (templateName) {
+        // Bypass 24h window using template
+        const localId = await insertPendingRow({
+          account,
+          toNumber: normalizedPhone,
+          messageType: 'template',
+          messageBody: `Order Confirmation Template: ${templateName}`,
+        });
+        await enqueueSend({
+          kind: 'template',
+          accountId: account.id,
+          to: normalizedPhone,
+          localMessageId: localId,
+          payload: {
+            name: templateName,
+            languageCode: 'en',
+            components: [
+              {
+                type: 'body',
+                parameters: [
+                  { type: 'text', text: String(orderId) },
+                  { type: 'text', text: String(total) }
+                ]
+              }
+            ]
+          }
+        });
+        console.log(`[wix-order-webhook] Successfully enqueued TEMPLATE order confirmation for ${normalizedPhone}`);
+      } else {
+        // Fallback to interactive (might fail if outside 24h window)
       const interactivePayload = {
         type: "button",
         body: { text: messageText },
@@ -2177,14 +2213,15 @@ router.post('/webhook/wix-order', async (req, res) => {
         messageType: 'interactive',
         messageBody: previousOrder ? 'Sent swap order confirmation with price comparison' : 'Sent website order confirmation with cancellation option',
       });
-      await enqueueSend({
-        kind: 'interactive',
-        accountId: account.id,
-        to: normalizedPhone,
-        localMessageId: localId,
-        payload: { interactive: interactivePayload }
-      });
-      console.log(`[wix-order-webhook] Successfully enqueued order confirmation for ${normalizedPhone}`);
+        await enqueueSend({
+          kind: 'interactive',
+          accountId: account.id,
+          to: normalizedPhone,
+          localMessageId: localId,
+          payload: { interactive: interactivePayload }
+        });
+        console.log(`[wix-order-webhook] Successfully enqueued INTERACTIVE order confirmation for ${normalizedPhone}`);
+      }
     } else {
       console.error('[wix-order-webhook] Failed to resolve WhatsApp account:', error);
     }
