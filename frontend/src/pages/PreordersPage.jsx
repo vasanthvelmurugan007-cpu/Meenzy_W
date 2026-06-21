@@ -442,7 +442,7 @@ export default function PreordersPage() {
                         </React.Fragment>
                       ));
                     })()}
-                  </tbody>y>
+                  </tbody>
                 </table>
               </div>
             )}
