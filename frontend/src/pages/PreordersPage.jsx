@@ -450,26 +450,46 @@ export default function PreordersPage() {
 
           {/* Right Side: Procurement Alerts & Actions */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, padding: 20, boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
-              <h3 style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
+            {(() => {
+              const groupedAlerts = Object.values(
+                preorders.filter(order => order.order_status !== 'confirmed').reduce((acc, order) => {
+                  const key = order.customer_phone;
+                  if (!acc[key]) {
+                    acc[key] = {
+                      customer_phone: key,
+                      customer_name: order.customer_name,
+                      items: []
+                    };
+                  }
+                  acc[key].items.push(order);
+                  return acc;
+                }, {})
+              );
+              return (
+                <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 12, padding: 20, boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
+                  <h3 style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
                 <AlertTriangle size={16} style={{ color: '#EAB308' }} /> Procurement Manager Alerts
               </h3>
               <p style={{ margin: '0 0 16px', fontSize: 12, color: '#64748B', lineHeight: 1.5 }}>
                 If a fresh haul fails quality check or is unavailable, trigger an alert to send WhatsApp Interactive Reply Buttons to impacted preorder customers.
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {preorders.filter(order => order.order_status !== 'confirmed').map((order) => (
-                  <div key={order.id} style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 12, borderBottom: '1px solid #F1F5F9', marginBottom: 4 }}>
-                    <div style={{ fontWeight: 600, fontSize: 14, color: '#1E293B' }}>{order.customer_name || `+${order.customer_phone}`}</div>
-                    <div style={{ fontSize: 12, color: '#64748B' }}>{order.ordered_item} ({parseFloat(order.quantity)} kg)</div>
-                    <div style={{ display: 'flex', gap: 6 }}>
+                {groupedAlerts.map((group) => (
+                  <div key={group.customer_phone} style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 12, borderBottom: '1px solid #F1F5F9', marginBottom: 4 }}>
+                    <div style={{ fontWeight: 600, fontSize: 14, color: '#1E293B' }}>{group.customer_name || `+${group.customer_phone}`}</div>
+                    {group.items.map(order => (
+                      <div key={order.id} style={{ fontSize: 12, color: '#64748B', display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <span style={{color:'#CBD5E1'}}>•</span> {order.ordered_item} ({parseFloat(order.quantity)} kg)
+                      </div>
+                    ))}
+                    <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
                       <button
                         disabled={triggering}
                         onClick={async () => {
-                          if (!window.confirm(`Trigger failure message for ${order.customer_name || 'this customer'}?`)) return;
+                          if (!window.confirm(`Fail ${group.items.length} items for ${group.customer_name || 'this customer'}?`)) return;
                           setTriggering(true);
                           try {
-                            await api.meenzy.cancelOrder(order.id);
+                            await Promise.all(group.items.map(o => api.meenzy.cancelOrder(o.id)));
                             fetchData();
                           } catch(e) {
                             alert('Failed to cancel order.');
@@ -501,18 +521,18 @@ export default function PreordersPage() {
                           e.currentTarget.style.background = '#FEF2F2';
                           e.currentTarget.style.borderColor = '#FEE2E2';
                         }}
-                        title={`Fail ${order.customer_name}`}
+                        title={`Fail All for ${group.customer_name}`}
                       >
-                        <span>Fail</span>
+                        <span>Fail All</span>
                         <AlertTriangle size={13} />
                       </button>
                       <button
                         disabled={triggering}
                         onClick={async () => {
-                          if (!window.confirm(`Confirm order and send tracking for ${order.customer_name || 'this customer'}?`)) return;
+                          if (!window.confirm(`Confirm ${group.items.length} items for ${group.customer_name || 'this customer'}?`)) return;
                           setTriggering(true);
                           try {
-                            await api.meenzy.confirmOrder(order.id);
+                            await Promise.all(group.items.map(o => api.meenzy.confirmOrder(o.id)));
                             fetchData();
                           } catch(e) {
                             alert('Failed to confirm order.');
@@ -544,22 +564,24 @@ export default function PreordersPage() {
                           e.currentTarget.style.background = '#ECFDF5';
                           e.currentTarget.style.borderColor = '#D1FAE5';
                         }}
-                        title={`Confirm ${order.customer_name}`}
+                        title={`Confirm All for ${group.customer_name}`}
                       >
-                        <span>Confirm</span>
+                        <span>Confirm All</span>
                         <CheckCircle2 size={13} />
                       </button>
                     </div>
                   </div>
                 ))}
                 
-                {preorders.length === 0 && (
+                {groupedAlerts.length === 0 && (
                   <div style={{ padding: 12, textAlign: 'center', color: '#94A3B8', fontSize: 12, border: '1px dashed #CBD5E1', borderRadius: 8 }}>
                     No pending items
                   </div>
                 )}
               </div>
             </div>
+            );
+            })()}
           </div>
         </div>
       ) : (
