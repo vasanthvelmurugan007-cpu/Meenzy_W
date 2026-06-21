@@ -475,14 +475,11 @@ export default function PreordersPage() {
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {groupedAlerts.map((group) => (
-                  <div key={group.customer_phone} style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 12, borderBottom: '1px solid #F1F5F9', marginBottom: 4 }}>
-                    <div style={{ fontWeight: 600, fontSize: 14, color: '#1E293B' }}>{group.customer_name || `+${group.customer_phone}`}</div>
-                    {group.items.map(order => (
-                      <div key={order.id} style={{ fontSize: 12, color: '#64748B', display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <span style={{color:'#CBD5E1'}}>•</span> {order.ordered_item} ({parseFloat(order.quantity)} kg)
-                      </div>
-                    ))}
-                    <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                  <div key={group.customer_phone} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 12, borderBottom: '1px solid #F1F5F9', marginBottom: 4 }}>
+                    <div style={{ fontWeight: 600, fontSize: 14, color: '#1E293B', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', paddingRight: 10 }}>
+                      {group.customer_name || `+${group.customer_phone}`}
+                    </div>
+                    <div style={{ display: 'flex', gap: 6 }}>
                       <button
                         disabled={triggering}
                         onClick={async () => {
@@ -523,8 +520,7 @@ export default function PreordersPage() {
                         }}
                         title={`Fail All for ${group.customer_name}`}
                       >
-                        <span>Fail All</span>
-                        <AlertTriangle size={13} />
+                        <AlertTriangle size={14} />
                       </button>
                       <button
                         disabled={triggering}
@@ -566,8 +562,7 @@ export default function PreordersPage() {
                         }}
                         title={`Confirm All for ${group.customer_name}`}
                       >
-                        <span>Confirm All</span>
-                        <CheckCircle2 size={13} />
+                        <CheckCircle2 size={14} />
                       </button>
                     </div>
                   </div>
