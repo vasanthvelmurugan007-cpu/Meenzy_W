@@ -220,61 +220,14 @@ async function checkoutCart(whatsappId, account) {
       );
     }
     
-    // Keep cart active to wait for delivery preference
-    await client.query(`UPDATE coexistence.meenzy_carts SET current_state = 'AWAITING_DELIVERY_PREF', updated_at = NOW() WHERE whatsapp_id = $1 AND status = 'active'`, [whatsappId]);
-    
+    // Start Address Collection Instead of immediately asking for Delivery Date
+    await client.query(`UPDATE coexistence.meenzy_carts SET current_state = 'AWAITING_ADDRESS', updated_at = NOW() WHERE whatsapp_id = $1 AND status = 'active'`, [whatsappId]);
     await client.query('COMMIT');
     
-    // Send Order Confirmation as Meta Template
-    const itemsList = cart.cart_items.map(item => `${item.base_name} (${item.quantity} Kg)`);
-    const receiptSummary = `Items: ${itemsList.join(', ')} | Total: ₹${totalAmt}`;
-    const trackingId = orderId;
-    const templateMsg = `Order confirmed. Receipt: ${receiptSummary}. Tracking: ${trackingId}`;
-    
-    const localId = await insertPendingRow({
-      account,
-      toNumber: whatsappId,
-      messageType: 'template',
-      messageBody: templateMsg,
-      templateMeta: {
-        name: 'meenzy_order_confirmation',
-        language: { code: 'en' },
-        components: [
-          {
-            type: 'body',
-            parameters: [
-              { type: 'text', text: receiptSummary },
-              { type: 'text', text: trackingId }
-            ]
-          }
-        ]
-      }
-    });
-
-    await enqueueSend({
-      kind: 'template',
-      accountId: account.id,
-      to: String(whatsappId).replace(/\D/g, ''),
-      localMessageId: localId,
-      payload: {
-        name: 'meenzy_order_confirmation',
-        languageCode: 'en',
-        components: [
-          {
-            type: 'body',
-            parameters: [
-              { type: 'text', text: receiptSummary },
-              { type: 'text', text: trackingId }
-            ]
-          }
-        ]
-      }
-    });
-
-    // Send Delivery Request Message
-    const { getDeliveryPayload } = require('../services/deliveryScheduler');
-    const deliveryPayload = getDeliveryPayload();
-    await sendMessage(whatsappId, account, deliveryPayload, 'Request Delivery Schedule');
+    // Send Address Prompt
+    const addressPrompt = "📍 Great! Before we schedule delivery, please type your *full delivery address* below:";
+    const localId = await insertPendingRow({ account, toNumber: whatsappId, messageType: 'text', messageBody: addressPrompt });
+    await enqueueSend({ kind: 'text', accountId: account.id, to: String(whatsappId).replace(/\D/g, ''), localMessageId: localId, payload: { body: addressPrompt, previewUrl: false } });
 
   } catch (e) {
     await client.query('ROLLBACK');
@@ -442,31 +395,125 @@ async function handleCartState(whatsappId, account, incomingPayload) {
 }
 
 
+async function evaluateTangentLLM(userText, currentStep) {
+  try {
+    const apiKey = process.env.OPENROUTER_API_KEY || process.env.GEMINI_API_KEY;
+    if (!apiKey && !process.env.GROQ_API_KEY) return { is_tangent: false, extracted_value: userText };
+    
+    let expectedType = "Text";
+    if (currentStep === 'ITEM_SELECTED') expectedType = "Number (Quantity for fish order)";
+    else if (currentStep === 'AWAITING_ADDRESS') expectedType = "Address string";
+
+    const systemPrompt = `You are the Meenzy Seafood AI assistant evaluating a user's message during checkout.
+Current checkout step: ${currentStep} (Expected input: ${expectedType}).
+User message: "${userText}"
+
+If the user is answering the prompt (e.g. providing a number for quantity, or an address), extract it and return is_tangent: false.
+If the user is asking a random question (e.g. "is it fresh?", "how long does it take?", "can I get it cleaned?"), return is_tangent: true and provide a helpful answer in tangent_answer based on seafood delivery best practices.
+
+Return ONLY valid JSON:
+{
+  "is_tangent": boolean,
+  "tangent_answer": "string or null",
+  "extracted_value": "string/number or null"
+}`;
+
+    let text = null;
+    if (process.env.GROQ_API_KEY) {
+      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${process.env.GROQ_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "llama-3.3-70b-versatile",
+          messages: [{ role: "system", content: systemPrompt }],
+          max_tokens: 150,
+          temperature: 0.1
+        })
+      });
+      const data = await response.json();
+      text = data?.choices?.[0]?.message?.content?.trim();
+    }
+    
+    if (text) {
+      const parsed = JSON.parse(text.replace(/```json/g, '').replace(/```/g, ''));
+      return parsed;
+    }
+    return { is_tangent: false, extracted_value: userText };
+  } catch(e) {
+    console.error('[cartManager] evaluateTangentLLM Error:', e.message);
+    return { is_tangent: false, extracted_value: userText };
+  }
+}
+
 async function handleFreeformText(whatsappId, account, text) {
   const cart = await getOrCreateCart(whatsappId);
-  if (cart.current_state === 'ITEM_SELECTED' || cart.current_state === 'CART_REVIEW') {
-    // If they typed something like "I want it cleaned well", save it to context
-    const context = cart.state_context || {};
-    context.special_instructions = (context.special_instructions || '') + ' ' + text;
-    
-    await pool.query(`
-      UPDATE coexistence.meenzy_carts 
-      SET state_context = $1, updated_at = NOW()
-      WHERE whatsapp_id = $2 AND status = 'active'
-    `, [JSON.stringify(context), whatsappId]);
-
-    const reply = "Got it! We'll make sure to follow your instructions: '" + text + "'. Please select your quantity below to continue:";
+  
+  if (['ITEM_SELECTED', 'AWAITING_ADDRESS'].includes(cart.current_state)) {
     const { insertPendingRow } = require('../services/messageSender');
     const { enqueueSend } = require('../queue/sendQueue');
+    const context = cart.state_context || {};
+
+    const evalResult = await evaluateTangentLLM(text, cart.current_state);
+
+    if (evalResult.is_tangent) {
+      // Interruption Handling
+      context.context_lock = true;
+      await pool.query(`UPDATE coexistence.meenzy_carts SET state_context = $1, updated_at = NOW() WHERE whatsapp_id = $2 AND status = 'active'`, [JSON.stringify(context), whatsappId]);
+      
+      let guidingFooter = "";
+      if (cart.current_state === 'ITEM_SELECTED') {
+        guidingFooter = "\n\n_By the way, coming back to your order, how many Kg should I add to your cart?_";
+      } else if (cart.current_state === 'AWAITING_ADDRESS') {
+        guidingFooter = "\n\n_To proceed with your order, please type your delivery address below._";
+      }
+
+      const reply = `${evalResult.tangent_answer}${guidingFooter}`;
+      const localId = await insertPendingRow({ account, toNumber: whatsappId, messageType: 'text', messageBody: reply });
+      await enqueueSend({ kind: 'text', accountId: account.id, to: String(whatsappId).replace(/\D/g, ''), localMessageId: localId, payload: { body: reply, previewUrl: false } });
+      return true;
+    }
+
+    // Direct Answer Logic
+    context.context_lock = false;
     
+    if (cart.current_state === 'ITEM_SELECTED') {
+      const qty = parseFloat(evalResult.extracted_value);
+      if (isNaN(qty)) {
+        const errReply = "Please enter a valid number for the quantity (e.g. 1 or 0.5).";
+        const localId = await insertPendingRow({ account, toNumber: whatsappId, messageType: 'text', messageBody: errReply });
+        await enqueueSend({ kind: 'text', accountId: account.id, to: String(whatsappId).replace(/\D/g, ''), localMessageId: localId, payload: { body: errReply, previewUrl: false } });
+        return true;
+      }
+      
+      await pool.query(`UPDATE coexistence.meenzy_carts SET state_context = $1, updated_at = NOW() WHERE whatsapp_id = $2 AND status = 'active'`, [JSON.stringify(context), whatsappId]);
+      await addItemToCart(whatsappId, context.selected_item, qty);
+      await updateCartState(whatsappId, 'CART_REVIEW');
+      await sendCartSummary(whatsappId, account);
+    } 
+    else if (cart.current_state === 'AWAITING_ADDRESS') {
+      context.address = evalResult.extracted_value;
+      await pool.query(`UPDATE coexistence.meenzy_carts SET current_state = 'AWAITING_DELIVERY_PREF', state_context = $1, updated_at = NOW() WHERE whatsapp_id = $2 AND status = 'active'`, [JSON.stringify(context), whatsappId]);
+      
+      const { getDeliveryPayload } = require('../services/deliveryScheduler');
+      const deliveryPayload = getDeliveryPayload();
+      await sendMessage(whatsappId, account, deliveryPayload, 'Request Delivery Schedule');
+    }
+    
+    return true;
+  }
+  
+  // If in CART_REVIEW, capture special instructions (Legacy behavior)
+  if (cart.current_state === 'CART_REVIEW') {
+    const context = cart.state_context || {};
+    context.special_instructions = (context.special_instructions || '') + ' ' + text;
+    await pool.query(`UPDATE coexistence.meenzy_carts SET state_context = $1, updated_at = NOW() WHERE whatsapp_id = $2 AND status = 'active'`, [JSON.stringify(context), whatsappId]);
+    
+    const reply = "Got it! We'll make sure to follow your instructions: '" + text + "'.";
+    const { insertPendingRow } = require('../services/messageSender');
+    const { enqueueSend } = require('../queue/sendQueue');
     const localId = await insertPendingRow({ account, toNumber: whatsappId, messageType: 'text', messageBody: reply });
     await enqueueSend({ kind: 'text', accountId: account.id, to: String(whatsappId).replace(/\D/g, ''), localMessageId: localId, payload: { body: reply, previewUrl: false } });
-    
-    if (cart.current_state === 'ITEM_SELECTED' && context.selected_item) {
-      await sendQuantityPicker(whatsappId, account, context.selected_item);
-    } else if (cart.current_state === 'CART_REVIEW') {
-      await sendCartSummary(whatsappId, account);
-    }
+    await sendCartSummary(whatsappId, account);
     return true;
   }
   return false;
