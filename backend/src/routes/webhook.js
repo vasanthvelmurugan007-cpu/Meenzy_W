@@ -2153,51 +2153,45 @@ router.post('/webhook/wix-order', async (req, res) => {
       console.log(`[wix-order-webhook] Swap detected for ${normalizedPhone}: prev=${prevItem}(₹${prevTotal}) → new=₹${newTotal}, diff=₹${diff}`);
     } else {
       // Normal new order — no previous cancelled order found
-      messageText = `Thank you for your order! 🌊 (Order #${orderId})\n\nBecause we source our seafood fresh daily, your order is currently marked as a *Preorder*.\n\n*Requested Items:*\n${itemsSummary.join('\n')}\n\n💵 *Total:* ₹${total}\n\nYour order has been registered. We will check for the availability and then we will send you the confirmation message soon!\n\n📍 *Track your order live:*\n${trackingLink}`;
+      messageText = `The order is confirmed. Thank you for ordering! 🌊 (Order #${orderId})\n\nBecause we source our seafood fresh daily, your order is currently marked as a *Preorder*.\n\n*Requested Items:*\n${itemsSummary.join('\n')}\n\n💵 *Total:* ₹${total}\n\n📍 *Track your order live:*\n${trackingLink}`;
     }
 
     const { resolveAccount, insertPendingRow } = require('../services/messageSender');
     const { enqueueSend } = require('../queue/sendQueue');
     const { account, error } = await resolveAccount({});
 
-    let templateName = process.env.ORDER_CONFIRM_TEMPLATE_NAME || null;
-    try {
-      const { rows } = await client.query(`SELECT value FROM coexistence.meenzy_settings WHERE key = 'wix_order_template'`);
-      if (rows.length > 0 && rows[0].value) templateName = rows[0].value;
-    } catch(e) {}
+    let templateName = process.env.ORDER_CONFIRM_TEMPLATE_NAME || 'meenzy_order_confirmation';
 
     if (!error && account) {
-      if (templateName) {
-        // Bypass 24h window using template
-        const localId = await insertPendingRow({
-          account,
-          toNumber: normalizedPhone,
-          messageType: 'template',
-          messageBody: `Order Confirmation Template: ${templateName}`,
-        });
-        await enqueueSend({
-          kind: 'template',
-          accountId: account.id,
-          to: normalizedPhone,
-          localMessageId: localId,
-          payload: {
-            name: templateName,
-            languageCode: 'en',
-            components: [
-              {
-                type: 'body',
-                parameters: [
-                  { type: 'text', text: String(order.buyerInfo?.firstName || order.billingInfo?.contactDetails?.firstName || 'Customer') },
-                  { type: 'text', text: `ORD-${orderId}` },
-                  { type: 'text', text: String(total) }
-                ]
-              }
-            ]
-          }
-        });
-        console.log(`[wix-order-webhook] Successfully enqueued TEMPLATE order confirmation for ${normalizedPhone}`);
-      } else {
-        // Fallback to interactive (might fail if outside 24h window)
+      // 1. Send the template to open the window
+      const localIdTpl = await insertPendingRow({
+        account,
+        toNumber: normalizedPhone,
+        messageType: 'template',
+        messageBody: `Order Confirmation Template: ${templateName}`,
+      });
+      await enqueueSend({
+        kind: 'template',
+        accountId: account.id,
+        to: normalizedPhone,
+        localMessageId: localIdTpl,
+        payload: {
+          name: templateName,
+          languageCode: 'en',
+          components: [
+            {
+              type: 'body',
+              parameters: [
+                { type: 'text', text: String(order.buyerInfo?.firstName || order.billingInfo?.contactDetails?.firstName || 'Customer') },
+                { type: 'text', text: `ORD-${orderId}` },
+                { type: 'text', text: String(total) }
+              ]
+            }
+          ]
+        }
+      });
+      
+      // 2. Send the interactive message with the Cancel button
       const interactivePayload = {
         type: "button",
         body: { text: messageText },
@@ -2208,21 +2202,20 @@ router.post('/webhook/wix-order', async (req, res) => {
         }
       };
 
-      const localId = await insertPendingRow({
+      const localIdTxt = await insertPendingRow({
         account,
         toNumber: normalizedPhone,
         messageType: 'interactive',
         messageBody: previousOrder ? 'Sent swap order confirmation with price comparison' : 'Sent website order confirmation with cancellation option',
       });
-        await enqueueSend({
-          kind: 'interactive',
-          accountId: account.id,
-          to: normalizedPhone,
-          localMessageId: localId,
-          payload: { interactive: interactivePayload }
-        });
-        console.log(`[wix-order-webhook] Successfully enqueued INTERACTIVE order confirmation for ${normalizedPhone}`);
-      }
+      await enqueueSend({
+        kind: 'interactive',
+        accountId: account.id,
+        to: normalizedPhone,
+        localMessageId: localIdTxt,
+        payload: { interactive: interactivePayload }
+      });
+      console.log(`[wix-order-webhook] Successfully enqueued BOTH template and interactive order confirmation for ${normalizedPhone}`);
     } else {
       console.error('[wix-order-webhook] Failed to resolve WhatsApp account:', error);
     }

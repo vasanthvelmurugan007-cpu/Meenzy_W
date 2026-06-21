@@ -279,64 +279,6 @@ async function confirmOrder(orderId, trackingNumber = null) {
       throw new Error('Active WhatsApp account details not found.');
     }
     
-    const version = 'v20.0';
-    const endpoint = `https://graph.facebook.com/${version}/${account.phoneNumberId}/messages`;
-    
-    const templatePayload = {
-      messaging_product: 'whatsapp',
-      recipient_type: 'individual',
-      to: String(order.customer_phone).replace(/\D/g, ''),
-      type: 'template',
-      template: {
-        name: 'meenzy_order_confirmation',
-        language: { code: 'en' },
-        components: [
-          {
-            type: 'body',
-            parameters: [
-              { type: 'text', text: receiptSummary },
-              { type: 'text', text: trackingId }
-            ]
-          }
-        ]
-      }
-    };
-    
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${account.accessToken}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(templatePayload)
-    });
-    
-    const resText = await res.text();
-    let parsed = null;
-    try { parsed = JSON.parse(resText); } catch {}
-    
-    if (!res.ok) {
-      throw new Error(`Meta API error (HTTP ${res.status}): ${parsed?.error?.message || resText}`);
-    }
-    
-    // Log template in chat_history
-    const wamid = parsed?.messages?.[0]?.id || `local-confirm-${Date.now()}`;
-    await pool.query(
-      `INSERT INTO coexistence.chat_history 
-       (message_id, phone_number_id, wa_number, contact_number, to_number, direction, message_type, message_body, status, timestamp)
-       VALUES ($1, $2, $3, $4, $5, 'outgoing', 'template', $6, $7, NOW())
-       ON CONFLICT (message_id) DO NOTHING`,
-      [
-        wamid,
-        account.phoneNumberId,
-        account.displayPhoneNumber.replace(/\D/g, ''),
-        String(order.customer_phone).replace(/\D/g, ''),
-        String(order.customer_phone).replace(/\D/g, ''),
-        `Order confirmed. Receipt: ${receiptSummary}. Tracking: ${trackingId}`,
-        'sent'
-      ]
-    );
-
     // 7. Send Follow-up Text Message with OTP and Tracking Link
     const trackingPhone = String(order.customer_phone).replace(/\D/g, '').slice(-4);
     const trackingLink = `${process.env.CORS_ORIGIN || 'https://meenzy-frontend.onrender.com'}/#/track/${ecosystemOrderId}?phone=${trackingPhone}`;
@@ -701,49 +643,6 @@ router.post('/meenzy/inventory-confirm', async (req, res) => {
         
         const receiptSummary = `${ordered_item} - Secured from catch | Total: ₹${o.total_price}`;
         const trackingId = String(displayOrderId).split('-')[0].slice(0, 8);
-        const templateMsg = `Order confirmed. Receipt: ${receiptSummary}. Tracking: ${trackingId}`;
-
-        // Create optimistic chat_history row for template
-        const localId = await insertPendingRow({
-          account,
-          toNumber: customer_phone,
-          messageType: 'template',
-          messageBody: templateMsg,
-          templateMeta: {
-            name: 'meenzy_order_confirmation',
-            language: { code: 'en' },
-            components: [
-              {
-                type: 'body',
-                parameters: [
-                  { type: 'text', text: receiptSummary },
-                  { type: 'text', text: trackingId }
-                ]
-              }
-            ]
-          }
-        });
-
-        // Enqueue template message
-        await enqueueSend({
-          kind: 'template',
-          accountId: account.id,
-          to: String(customer_phone).replace(/\D/g, ''),
-          localMessageId: localId,
-          payload: {
-            name: 'meenzy_order_confirmation',
-            languageCode: 'en',
-            components: [
-              {
-                type: 'body',
-                parameters: [
-                  { type: 'text', text: receiptSummary },
-                  { type: 'text', text: trackingId }
-                ]
-              }
-            ]
-          }
-        });
 
         // Send a follow-up interactive message with OTP, tracking link, and Cancel button
         const otpMsg = `🔒 *Your Delivery OTP:* ${otp}\n\n📍 *Track your order live here:*\n${trackingLink}\n\nPlease share this OTP with the delivery agent when they arrive!\n\n(If you need to make changes, you can cancel your order before dispatch.)`;
@@ -1205,46 +1104,40 @@ router.post('/meenzy/batch-agent/process', async (req, res) => {
         
         const receiptSummary = `${itemName} (${quantity} Kg) - Secured from catch`;
         const trackingId = order.id.toString();
-        const templateMsg = `Order confirmed. Receipt: ${receiptSummary}. Tracking: ${trackingId}`;
         
-        const localId = await insertPendingRow({
-          account,
-          toNumber: customerPhone,
-          messageType: 'template',
-          messageBody: templateMsg,
-          templateMeta: {
-            name: 'meenzy_order_confirmation',
-            language: { code: 'en' },
-            components: [
-              {
-                type: 'body',
-                parameters: [
-                  { type: 'text', text: receiptSummary },
-                  { type: 'text', text: trackingId }
-                ]
-              }
+        // Generate OTP
+        const otp = Math.floor(1000 + Math.random() * 9000).toString();
+        await pool.query(`UPDATE coexistence.ecosystem_orders SET delivery_otp = $1 WHERE id = $2`, [otp, order.id]);
+        
+        const trackingPhone = String(customerPhone).replace(/\D/g, '').slice(-4);
+        const trackingLink = `${process.env.CORS_ORIGIN || 'https://meenzy-frontend.onrender.com'}/#/track/${order.id}?phone=${trackingPhone}`;
+        
+        // Send a follow-up interactive message with OTP, tracking link, and Cancel button
+        const otpMsg = `🔒 *Your Delivery OTP:* ${otp}\n\n📍 *Track your order live here:*\n${trackingLink}\n\nPlease share this OTP with the delivery agent when they arrive!\n\n(If you need to make changes, you can cancel your order before dispatch.)`;
+        
+        const interactivePayload = {
+          type: "button",
+          body: { text: otpMsg },
+          action: {
+            buttons: [
+              { type: "reply", reply: { id: `cancel_wix_order_${order.id}`, title: "Cancel Order ❌" } }
             ]
           }
+        };
+        
+        const localIdTxt = await insertPendingRow({
+          account,
+          toNumber: customerPhone,
+          messageType: 'interactive',
+          messageBody: `Sent confirmation with OTP for ${order.id}`,
         });
         
         await enqueueSend({
-          kind: 'template',
+          kind: 'interactive',
           accountId: account.id,
           to: String(customerPhone).replace(/\D/g, ''),
-          localMessageId: localId,
-          payload: {
-            name: 'meenzy_order_confirmation',
-            languageCode: 'en',
-            components: [
-              {
-                type: 'body',
-                parameters: [
-                  { type: 'text', text: receiptSummary },
-                  { type: 'text', text: trackingId }
-                ]
-              }
-            ]
-          }
+          localMessageId: localIdTxt,
+          payload: { interactive: interactivePayload },
         });
         
         confirmedCount++;
