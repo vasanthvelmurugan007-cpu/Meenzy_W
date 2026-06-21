@@ -284,14 +284,10 @@ export const api = {
     }).then(async res => {
       if (!res.ok) {
         const text = await res.text().catch(() => '');
-        throw new Error(`${res.status} ${text}`);
-      }
-      return res.json();
-    });
-  },
   meenzy: {
     preorders: () => req('/meenzy/preorders'),
     confirmOrder: (id) => req(`/meenzy/preorders/${id}/confirm`, { method: 'POST' }),
+    cancelOrder: (id) => req(`/meenzy/preorders/${id}/cancel`, { method: 'POST' }),
     assignDriver: (id, driver_id) => req(`/meenzy/preorders/${id}/assign`, { method: 'PUT', body: JSON.stringify({ driver_id }) }),
     triggerFailure: (ordered_item) => req('/meenzy/inventory-failure', { method: 'POST', body: JSON.stringify({ ordered_item }) }),
     triggerConfirm: (ordered_item) => req('/meenzy/inventory-confirm', { method: 'POST', body: JSON.stringify({ ordered_item }) }),

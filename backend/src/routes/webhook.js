@@ -2187,7 +2187,8 @@ router.post('/webhook/wix-order', async (req, res) => {
               {
                 type: 'body',
                 parameters: [
-                  { type: 'text', text: String(orderId) },
+                  { type: 'text', text: String(order.buyerInfo?.firstName || order.billingInfo?.contactDetails?.firstName || 'Customer') },
+                  { type: 'text', text: `ORD-${orderId}` },
                   { type: 'text', text: String(total) }
                 ]
               }
