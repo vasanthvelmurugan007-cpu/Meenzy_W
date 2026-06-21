@@ -125,6 +125,7 @@ export default function ChatsPage({ subParts = [], navigate, user }) {
             key={selectedNumber}
             waNumber={selectedNumber}
             width={effectiveContactW}
+            user={user}
             selectedContact={selectedContact}
             onSelectContact={selectContact}
             refreshKey={contactRefreshKey}

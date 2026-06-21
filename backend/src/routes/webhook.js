@@ -768,6 +768,12 @@ router.post('/webhook/whatsapp', async (req, res) => {
     try {
       await client.query('BEGIN');
 
+      let automationMode = 'auto';
+      try {
+        const { rows: ms } = await client.query(`SELECT value FROM coexistence.meenzy_settings WHERE key = 'whatsapp_automation_mode'`);
+        if (ms.length > 0) automationMode = ms[0].value;
+      } catch (e) {}
+
       for (const r of allRecords) {
         // Status receipts (sent/delivered/read/failed) update the ORIGINAL
         // message's status — they must never create a chat row. Inserting them
@@ -898,8 +904,13 @@ router.post('/webhook/whatsapp', async (req, res) => {
 
         // MEENZY Custom Workflow Rule 2 (Inbound Regex Parser Engine) was removed so all text/voice orders use Native Conversational Flow (Rule 6).
 
+        // MEENZY Global Automation Override: Pause bot in manual mode
+        if (automationMode === 'manual' && r.direction === 'incoming' && !r.__handled) {
+          r.__handled = true;
+        }
+
         // MEENZY Custom Workflow Rule 2.5: Inbound WhatsApp Native Order Parser
-        if (r.direction === 'incoming' && r.message_type === 'order' && r.raw_payload) {
+        if (r.direction === 'incoming' && r.message_type === 'order' && r.raw_payload && !r.__handled) {
           try {
             const rawObj = JSON.parse(r.raw_payload);
             const metaMsg = rawObj?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];

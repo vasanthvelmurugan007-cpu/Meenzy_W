@@ -458,13 +458,25 @@ export default function PreordersPage() {
                 If a fresh haul fails quality check or is unavailable, trigger an alert to send WhatsApp Interactive Reply Buttons to impacted preorder customers.
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {Array.from(new Set(preorders.map(order => (order.ordered_item || '').split('-')[0].split('/')[0].trim()))).filter(Boolean).map((item) => (
-                  <div key={item} style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 12, borderBottom: '1px solid #F1F5F9', marginBottom: 4 }}>
-                    <div style={{ fontWeight: 600, fontSize: 14, color: '#1E293B' }}>{item}</div>
+                {preorders.filter(order => order.order_status !== 'confirmed').map((order) => (
+                  <div key={order.id} style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 12, borderBottom: '1px solid #F1F5F9', marginBottom: 4 }}>
+                    <div style={{ fontWeight: 600, fontSize: 14, color: '#1E293B' }}>{order.customer_name || `+${order.customer_phone}`}</div>
+                    <div style={{ fontSize: 12, color: '#64748B' }}>{order.ordered_item} ({parseFloat(order.quantity)} kg)</div>
                     <div style={{ display: 'flex', gap: 6 }}>
                       <button
                         disabled={triggering}
-                        onClick={() => handleTriggerFailure(item)}
+                        onClick={async () => {
+                          if (!window.confirm(`Trigger failure message for ${order.customer_name || 'this customer'}?`)) return;
+                          setTriggering(true);
+                          try {
+                            await api.meenzy.cancelOrder(order.id);
+                            fetchData();
+                          } catch(e) {
+                            alert('Failed to cancel order.');
+                          } finally {
+                            setTriggering(false);
+                          }
+                        }}
                         style={{
                           flex: 1,
                           padding: '10px 14px',
@@ -489,14 +501,25 @@ export default function PreordersPage() {
                           e.currentTarget.style.background = '#FEF2F2';
                           e.currentTarget.style.borderColor = '#FEE2E2';
                         }}
-                        title={`Fail ${item}`}
+                        title={`Fail ${order.customer_name}`}
                       >
                         <span>Fail</span>
                         <AlertTriangle size={13} />
                       </button>
                       <button
                         disabled={triggering}
-                        onClick={() => handleTriggerConfirm(item)}
+                        onClick={async () => {
+                          if (!window.confirm(`Confirm order and send tracking for ${order.customer_name || 'this customer'}?`)) return;
+                          setTriggering(true);
+                          try {
+                            await api.meenzy.confirmOrder(order.id);
+                            fetchData();
+                          } catch(e) {
+                            alert('Failed to confirm order.');
+                          } finally {
+                            setTriggering(false);
+                          }
+                        }}
                         style={{
                           flex: 1,
                           padding: '10px 14px',
@@ -521,7 +544,7 @@ export default function PreordersPage() {
                           e.currentTarget.style.background = '#ECFDF5';
                           e.currentTarget.style.borderColor = '#D1FAE5';
                         }}
-                        title={`Confirm ${item}`}
+                        title={`Confirm ${order.customer_name}`}
                       >
                         <span>Confirm</span>
                         <CheckCircle2 size={13} />

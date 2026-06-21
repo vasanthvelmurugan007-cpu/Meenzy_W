@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, User } from 'lucide-react';
+import { Search, User, Bot } from 'lucide-react';
 import { usePolling } from '../hooks/usePolling.js';
 import { api } from '../api.js';
 import { C, FONT, relativeTime, maskPhone, darkenColor } from '../constants.js';
@@ -11,6 +11,23 @@ export default function ContactList({ waNumber, width = 380, selectedContact, on
   const [allTags, setAllTags] = useState([]);
   const [filterTagIds, setFilterTagIds] = useState([]);
   const [waName, setWaName] = useState(null); // saved display name for this business number
+  const [automationMode, setAutomationMode] = useState('auto');
+
+  useEffect(() => {
+    if (user?.role === 'admin') {
+      api.getMeenzySettings().then(s => setAutomationMode(s.whatsapp_automation_mode || 'auto')).catch(()=>{});
+    }
+  }, [user]);
+
+  const toggleMode = async () => {
+    const newMode = automationMode === 'auto' ? 'manual' : 'auto';
+    setAutomationMode(newMode);
+    try {
+      await api.updateMeenzySetting('whatsapp_automation_mode', newMode);
+    } catch(e) {
+      alert('Failed to update mode');
+    }
+  };
 
   // Resolve the saved display name for this WhatsApp number (shown in header).
   useEffect(() => {
@@ -79,6 +96,21 @@ export default function ContactList({ waNumber, width = 380, selectedContact, on
             {contacts.length} contacts
           </span>
         </div>
+        {user?.role === 'admin' && (
+          <button
+            onClick={toggleMode}
+            title={automationMode === 'auto' ? 'Switch to Manual Mode' : 'Switch to Auto Mode'}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              background: automationMode === 'auto' ? '#ECFDF5' : '#FEF2F2',
+              color: automationMode === 'auto' ? '#065F46' : '#991B1B',
+              border: `1px solid ${automationMode === 'auto' ? '#A7F3D0' : '#FECACA'}`,
+              padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s'
+            }}
+          >
+            {automationMode === 'auto' ? <><Bot size={13} /> Auto</> : <><User size={13} /> Manual</>}
+          </button>
+        )}
       </div>
 
       {/* Search + tag filter */}
