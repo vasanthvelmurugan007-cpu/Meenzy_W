@@ -418,7 +418,7 @@ router.get('/meenzy/preorders', async (req, res) => {
                FROM coexistence.contacts c 
                WHERE RIGHT(regexp_replace(c.wa_id, '\\D', '', 'g'), 10) = RIGHT(regexp_replace(p.customer_phone, '\\D', '', 'g'), 10) 
                  AND profile_name IS NOT NULL 
-               ORDER BY created_at DESC LIMIT 1
+               LIMIT 1
               ) as customer_name,
               COALESCE(
                 (SELECT o.payment_status
