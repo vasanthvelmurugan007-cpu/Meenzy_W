@@ -284,6 +284,11 @@ export const api = {
     }).then(async res => {
       if (!res.ok) {
         const text = await res.text().catch(() => '');
+        throw new Error(`${res.status} ${text}`);
+      }
+      return res.json();
+    });
+  },
   meenzy: {
     preorders: () => req('/meenzy/preorders'),
     confirmOrder: (id) => req(`/meenzy/preorders/${id}/confirm`, { method: 'POST' }),
