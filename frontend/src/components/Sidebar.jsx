@@ -4,6 +4,8 @@ import {
   Archive, TrendingUp, LayoutDashboard, Sparkles, Store
 } from 'lucide-react';
 import { C, FONT } from '../constants.js';
+import { api } from '../api.js';
+import { useState, useEffect } from 'react';
 
 const NAV_ITEMS = [
   { id: 'home', label: 'Home', Icon: Home },
@@ -34,6 +36,26 @@ export default function Sidebar({ activePage, onPageChange, collapsed, setCollap
   const visibleItems = (user?.role === 'admin' || !Array.isArray(user?.pages))
     ? NAV_ITEMS
     : NAV_ITEMS.filter(item => user.pages.includes(item.id));
+
+  const [unconfirmedCount, setUnconfirmedCount] = useState(0);
+
+  useEffect(() => {
+    let interval;
+    if (user?.role === 'admin' || user?.pages?.includes('preorders')) {
+      const fetchCount = async () => {
+        try {
+          const data = await api.meenzy.preorders();
+          if (Array.isArray(data)) {
+            const count = data.filter(o => o.order_status !== 'confirmed').length;
+            setUnconfirmedCount(count);
+          }
+        } catch(e) {}
+      };
+      fetchCount();
+      interval = setInterval(fetchCount, 30000); // every 30s
+    }
+    return () => clearInterval(interval);
+  }, [user]);
   return (
     <div style={{
       width: collapsed ? 68 : 224,
@@ -57,6 +79,7 @@ export default function Sidebar({ activePage, onPageChange, collapsed, setCollap
               onClick={() => onPageChange(item.id)}
               title={collapsed ? item.label : ''}
               style={{
+                position: 'relative',
                 display: 'flex',
                 alignItems: 'center',
                 gap: collapsed ? 0 : 11,
@@ -97,7 +120,33 @@ export default function Sidebar({ activePage, onPageChange, collapsed, setCollap
               }}>
                 <item.Icon size={16} />
               </span>
-              {!collapsed && <span style={{ letterSpacing: '-.01em' }}>{item.label}</span>}
+              {!collapsed && <span style={{ letterSpacing: '-.01em', flex: 1 }}>{item.label}</span>}
+              
+              {/* Badge for Preorders */}
+              {item.id === 'preorders' && unconfirmedCount > 0 && !collapsed && (
+                <span style={{
+                  background: '#EF4444',
+                  color: 'white',
+                  fontSize: 10,
+                  fontWeight: 'bold',
+                  padding: '2px 6px',
+                  borderRadius: 10,
+                  lineHeight: 1
+                }}>
+                  {unconfirmedCount}
+                </span>
+              )}
+              {item.id === 'preorders' && unconfirmedCount > 0 && collapsed && (
+                <div style={{
+                  position: 'absolute',
+                  top: 10,
+                  right: 22,
+                  width: 8,
+                  height: 8,
+                  background: '#EF4444',
+                  borderRadius: '50%'
+                }} />
+              )}
             </div>
           );
         })}
