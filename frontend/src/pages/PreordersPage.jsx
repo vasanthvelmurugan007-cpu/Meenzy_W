@@ -318,7 +318,8 @@ export default function PreordersPage() {
                       <th style={{ padding: '12px 20px' }}>Assign Agent</th>
                       <th style={{ padding: '12px 20px', textAlign: 'center' }}>Actions</th>
                     </tr>
-                  </thead                  <tbody>
+                  </thead>
+                  <tbody>
                     {(() => {
                       const groupedList = [];
                       const phoneToGroup = {};
