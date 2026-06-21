@@ -488,7 +488,7 @@ export default function DeliveriesPage() {
                 style={{ fontFamily: FONT }}
               >
                 <div style={{ padding: 8, minWidth: 200 }}>
-                  <p style={{ fontWeight: 700, margin: '0 0 4px 0', fontSize: 13 }}>Order #{selectedOrder.wix_order_id || String(selectedOrder.id).split('-')[0].toUpperCase()}</p>
+                  <p style={{ fontWeight: 700, margin: '0 0 4px 0', fontSize: 13 }}>Order #{selectedOrder.display_id || selectedOrder.wix_order_id || String(selectedOrder.id).split('-')[0].toUpperCase()}</p>
                   <p style={{ fontSize: 11, color: '#6b7280', margin: '0 0 8px 0' }}>{selectedOrder.address_line}</p>
                   <p style={{ fontSize: 11, fontWeight: 600, color: '#374151', margin: '0 0 4px 0' }}>Status: {selectedOrder.status}</p>
                   {selectedOrder.assigned_agent_id && (
@@ -581,7 +581,7 @@ export default function DeliveriesPage() {
               }}>
                 <div style={{ flex: 1 }}>
                   <p style={{ fontWeight: 700, color: C.text, margin: '0 0 4px 0', fontSize: 15 }}>
-                    Order #{order.wix_order_id || String(order.id).split('-')[0].toUpperCase()} <span style={{ fontSize: 13, fontWeight: 500, color: C.textSecondary, marginLeft: 8 }}>Phone: {order.user_phone}</span>
+                    Order #{order.display_id || order.wix_order_id || String(order.id).split('-')[0].toUpperCase()} <span style={{ fontSize: 13, fontWeight: 500, color: C.textSecondary, marginLeft: 8 }}>Phone: {order.user_phone}</span>
                   </p>
                   <p style={{ fontSize: 13, color: C.textSecondary, margin: '0 0 8px 0' }}>Address: {order.address_line}</p>
                   <div style={{ fontSize: 13, color: C.textSecondary }}>
@@ -731,7 +731,7 @@ export default function DeliveriesPage() {
                             />
                           </td>
                           <td style={{ padding: '12px 20px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
-                            {order.wix_order_id || String(order.id).split('-')[0].toUpperCase()}
+                            {order.display_id || order.wix_order_id || String(order.id).split('-')[0].toUpperCase()}
                             <button 
                               onClick={() => handleDelete(order.id)} 
                               style={{ padding: '4px', background: 'transparent', color: '#ef4444', border: 'none', cursor: 'pointer', borderRadius: 4, display: 'flex', alignItems: 'center' }}
