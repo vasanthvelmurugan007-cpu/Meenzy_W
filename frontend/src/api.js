@@ -307,7 +307,7 @@ export const api = {
     forecast: () => req('/meenzy/dashboard/forecast'),
   },
   deliveries: {
-    list: () => req('/admin/orders'),
+    list: (filter) => req(`/admin/orders${filter ? `?filter=${encodeURIComponent(filter)}` : ''}`),
     delete: (id) => req(`/admin/orders/${id}`, { method: 'DELETE' }),
     reattempt: (id) => req(`/admin/orders/${id}/reattempt`, { method: 'POST' }),
     cancel: (id) => req(`/admin/orders/${id}/cancel`, { method: 'POST' }),
@@ -320,6 +320,9 @@ export const api = {
   },
   forecasting: {
     heatmap: () => req('/admin/forecasting/heatmap'),
+  },
+  analytics: {
+    delivered: () => req('/admin/orders/analytics/delivered'),
   },
   agents: {
     list: () => req('/admin/agents'),

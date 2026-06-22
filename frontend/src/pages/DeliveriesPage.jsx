@@ -113,7 +113,7 @@ export default function DeliveriesPage() {
   async function fetchOrders(silent = false) {
     try {
       if (!silent) setLoading(true);
-      const data = await api.deliveries.list();
+      const data = await api.deliveries.list('active');
       setOrders(data.orders || []);
       if (!silent) setError(null);
     } catch (err) {
@@ -391,13 +391,7 @@ export default function DeliveriesPage() {
             mapLib={maplibregl}
             initialViewState={viewState}
             onLoad={e => e.target.resize()}
-            mapStyle={`https://api.olamaps.io/tiles/vector/v1/styles/default-light-standard/style.json`}
-            transformRequest={(url, resourceType) => {
-              if (url.includes('api.olamaps.io')) {
-                const olaToken = import.meta.env.VITE_OLA_MAPS_KEY || import.meta.env.VITE_OLA_MAPS_API_KEY || import.meta.env.VITE_MAPBOX_TOKEN;
-                return { url: `${url}${url.includes('?') ? '&' : '?'}api_key=${olaToken}` };
-              }
-            }}
+            mapStyle={`https://basemaps.cartocdn.com/gl/positron-gl-style/style.json`}
             style={{ width: '100%', height: '100%' }}
           >
             <NavigationControl position="top-right" />

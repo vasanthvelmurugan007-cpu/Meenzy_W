@@ -9,6 +9,12 @@ const { assertOrderTransition } = require('../engine/stateMachine');
  */
 router.get('/', async (req, res) => {
   try {
+    const { filter } = req.query;
+    let filterClause = '';
+    if (filter === 'active') {
+      filterClause = "WHERE o.status != 'DELIVERED'";
+    }
+
     const { rows: orders } = await pool.query(`
       SELECT o.id, o.wix_order_id, o.user_phone, o.total_price, o.status, o.address_line, o.lat, o.lng, o.created_at, o.assigned_agent_id, o.payment_status, o.delivery_instructions, o.notes,
              (SELECT c.name FROM coexistence.contacts c WHERE RIGHT(regexp_replace(c.contact_number, '\\D', '', 'g'), 10) = RIGHT(regexp_replace(o.user_phone, '\\D', '', 'g'), 10) ORDER BY c.updated_at DESC LIMIT 1) as customer_name,
@@ -22,12 +28,65 @@ router.get('/', async (req, res) => {
               WHERE j.order_id = o.id ORDER BY j.created_at DESC LIMIT 1) as latest_job
       FROM coexistence.ecosystem_orders o
       LEFT JOIN coexistence.ecosystem_order_items i ON o.id = i.order_id
+      ${filterClause}
       GROUP BY o.id
       ORDER BY o.created_at DESC
     `);
     res.json({ ok: true, orders });
   } catch (err) {
     console.error('[AdminOrders] Fetch Error:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/**
+ * GET /api/admin/orders/analytics/delivered
+ * Returns delivered orders, total revenue, and high demand stats.
+ */
+router.get('/analytics/delivered', async (req, res) => {
+  try {
+    // 1. Fetch delivered orders
+    const { rows: deliveredOrders } = await pool.query(`
+      SELECT o.id, o.wix_order_id, o.user_phone, o.total_price, o.status, o.address_line, o.created_at, o.updated_at,
+             (SELECT c.name FROM coexistence.contacts c WHERE RIGHT(regexp_replace(c.contact_number, '\\D', '', 'g'), 10) = RIGHT(regexp_replace(o.user_phone, '\\D', '', 'g'), 10) ORDER BY c.updated_at DESC LIMIT 1) as customer_name,
+             COALESCE(
+               json_agg(
+                 json_build_object('product_name', i.product_name, 'quantity', i.quantity, 'price', i.price)
+               ) FILTER (WHERE i.id IS NOT NULL), '[]'
+             ) as items
+      FROM coexistence.ecosystem_orders o
+      LEFT JOIN coexistence.ecosystem_order_items i ON o.id = i.order_id
+      WHERE o.status = 'DELIVERED'
+      GROUP BY o.id
+      ORDER BY o.updated_at DESC
+    `);
+
+    // 2. Calculate Total Revenue
+    let totalRevenue = 0;
+    for (const order of deliveredOrders) {
+      if (order.total_price && !isNaN(parseFloat(order.total_price))) {
+        totalRevenue += parseFloat(order.total_price);
+      }
+    }
+
+    // 3. Calculate Demand Stats
+    const { rows: demandStats } = await pool.query(`
+      SELECT i.product_name, SUM(i.quantity) as total_quantity
+      FROM coexistence.ecosystem_order_items i
+      JOIN coexistence.ecosystem_orders o ON i.order_id = o.id
+      WHERE o.status = 'DELIVERED'
+      GROUP BY i.product_name
+      ORDER BY total_quantity DESC
+    `);
+
+    res.json({ 
+      ok: true, 
+      totalRevenue,
+      demandStats,
+      deliveredOrders
+    });
+  } catch (err) {
+    console.error('[AdminAnalytics] Fetch Error:', err.message);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

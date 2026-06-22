@@ -158,13 +158,7 @@ export default function AnalyticsPage() {
               <Map
                 mapLib={maplibregl}
                 initialViewState={{ longitude: 80.2707, latitude: 13.0827, zoom: 11 }}
-                mapStyle={`https://api.olamaps.io/tiles/vector/v1/styles/default-light-standard/style.json`}
-                transformRequest={(url, resourceType) => {
-                  if (url.includes('api.olamaps.io')) {
-                    const olaToken = import.meta.env.VITE_OLA_MAPS_KEY || import.meta.env.VITE_OLA_MAPS_API_KEY || import.meta.env.VITE_MAPBOX_TOKEN;
-                    return { url: `${url}${url.includes('?') ? '&' : '?'}api_key=${olaToken}` };
-                  }
-                }}
+                mapStyle={`https://basemaps.cartocdn.com/gl/positron-gl-style/style.json`}
               >
                 <NavigationControl position="top-right" />
                 <Source type="geojson" data={heatmapData}>

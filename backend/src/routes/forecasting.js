@@ -53,7 +53,6 @@ router.get('/heatmap', async (req, res) => {
         COUNT(*) as weight 
       FROM coexistence.ecosystem_orders
       WHERE lat IS NOT NULL AND lng IS NOT NULL
-        AND created_at >= NOW() - INTERVAL '30 days'
       GROUP BY lat, lng
     `);
 

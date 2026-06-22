@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { id: 'home', label: 'Home', Icon: Home },
   { id: 'dashboard', label: 'Dashboard', Icon: LayoutDashboard },
   { id: 'analytics', label: 'Analytics', Icon: TrendingUp },
+  { id: 'delivered-analytics', label: 'Delivered Analytics', Icon: TrendingUp },
   { id: 'smart-campaigns', label: 'Smart Campaigns', Icon: Sparkles },
   { id: 'chatbot-builder', label: 'Automations', Icon: Zap },
   { id: 'template-builder', label: 'Template Builder', Icon: LayoutTemplate },

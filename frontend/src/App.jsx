@@ -26,6 +26,7 @@ import BatchAgentPage from './pages/BatchAgentPage.jsx';
 import DemandForecastPage from './pages/DemandForecastPage.jsx';
 import DashboardPage from './pages/DashboardPage.jsx';
 import AnalyticsPage from './pages/AnalyticsPage.jsx';
+import DeliveredAnalyticsPage from './pages/DeliveredAnalyticsPage.jsx';
 import SmartCampaignsPage from './pages/SmartCampaignsPage.jsx';
 import MarketingPage from './pages/MarketingPage.jsx';
 import SentimentPage from './pages/SentimentPage.jsx';
@@ -33,7 +34,7 @@ import SentimentPage from './pages/SentimentPage.jsx';
 import B2BPortal from './pages/B2BPortal.jsx';
 
 const VALID_PAGES = new Set([
-  'home', 'dashboard', 'analytics', 'smart-campaigns', 'chatbot-builder', 'template-builder', 'chats',
+  'home', 'dashboard', 'analytics', 'delivered-analytics', 'smart-campaigns', 'chatbot-builder', 'template-builder', 'chats',
   'contacts', 'preorders', 'refunds', 'pipelines', 'bulk-message', 'admin-settings', 'media-library', 'catalog', 'deliveries', 'track', 'agents', 'agent-portal', 'batch-agent', 'demand-forecast', 'marketing', 'sentiment', 'b2b-portal'
 ]);
 
@@ -142,6 +143,7 @@ export default function App() {
       case 'home': return <HomePage user={user} onPageChange={setPage} />;
       case 'dashboard': return <DashboardPage user={user} onPageChange={setPage} />;
       case 'analytics': return <AnalyticsPage />;
+      case 'delivered-analytics': return <DeliveredAnalyticsPage />;
       case 'smart-campaigns': return <SmartCampaignsPage user={user} />;
       case 'chats': return <ChatsPage subParts={subParts} navigate={navigate} user={user} />;
       case 'contacts': return <ContactsPage user={user} />;

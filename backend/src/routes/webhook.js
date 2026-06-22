@@ -2168,7 +2168,7 @@ router.post('/webhook/wix-order', async (req, res) => {
     const { enqueueSend } = require('../queue/sendQueue');
     const { account, error } = await resolveAccount({});
 
-    let templateName = process.env.ORDER_CONFIRM_TEMPLATE_NAME || 'meenzy_order_confirmation';
+    let templateName = process.env.ORDER_CONFIRM_TEMPLATE_NAME || 'order_confirmation';
 
     if (!error && account) {
       // 1. Send the template to open the window
