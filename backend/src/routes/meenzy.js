@@ -26,9 +26,7 @@ router.get('/meenzy/run-migration', async (req, res) => {
     try {
       await pool.query(`ALTER TABLE coexistence.ecosystem_orders ADD CONSTRAINT uq_ecosystem_orders_display_id UNIQUE (display_id);`);
     } catch(e) {}
-    try {
-      await pool.query(`ALTER TABLE coexistence.meenzy_preorders ADD CONSTRAINT uq_meenzy_preorders_display_id UNIQUE (display_id);`);
-    } catch(e) {}
+
 
     res.send('Migration done!');
   } catch(e) {
