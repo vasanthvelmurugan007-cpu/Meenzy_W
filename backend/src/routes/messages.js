@@ -153,7 +153,7 @@ async function parseSheetRows(file) {
   return rows;
 }
 
-const DEFAULT_DATA_WINDOW = "INTERVAL '14 days'";
+const DEFAULT_DATA_WINDOW = "INTERVAL '365 days'";
 
 function timeRangeToInterval(range) {
   const map = {
@@ -163,6 +163,7 @@ function timeRangeToInterval(range) {
     '7d': "INTERVAL '7 days'",
     '14d': "INTERVAL '14 days'",
     '30d': "INTERVAL '30 days'",
+    '365d': "INTERVAL '365 days'",
   };
   return map[range] || null;
 }

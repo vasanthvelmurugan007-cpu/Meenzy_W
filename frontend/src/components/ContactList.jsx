@@ -41,7 +41,7 @@ export default function ContactList({ waNumber, width = 380, selectedContact, on
     return () => { alive = false; };
   }, [waNumber]);
   // Polling refresh (every 30s).
-  const { data, loading, refetch } = usePolling(() => api.contacts(waNumber, '30d'), 30000);
+  const { data, loading, refetch } = usePolling(() => api.contacts(waNumber, '365d'), 30000);
 
   // Tag taxonomy for the filter dropdown.
   useEffect(() => {

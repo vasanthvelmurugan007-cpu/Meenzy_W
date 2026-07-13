@@ -19,16 +19,14 @@ UPDATE coexistence.media_library SET storage_backend = 'postgres'
  WHERE storage_backend IS DISTINCT FROM 'postgres';
 ALTER TABLE coexistence.media_library ALTER COLUMN storage_backend SET DEFAULT 'postgres';
 
--- 3. Remove the Supabase roles and everything tied to them. DROP OWNED BY
---    revokes all grants and drops dependent objects/policies; then the role can
---    be dropped. Guarded so it no-ops when a role doesn't exist.
-DO $$
-DECLARE r TEXT;
-BEGIN
-  FOREACH r IN ARRAY ARRAY['service_role', 'authenticated', 'anon'] LOOP
-    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = r) THEN
-      EXECUTE format('DROP OWNED BY %I CASCADE', r);
-      EXECUTE format('DROP ROLE %I', r);
-    END IF;
-  END LOOP;
-END $$;
+-- 3. Remove the Supabase roles and everything tied to them. (Skipped on Supabase as these are reserved roles)
+-- DO $$
+-- DECLARE r TEXT;
+-- BEGIN
+--   FOREACH r IN ARRAY ARRAY['service_role', 'authenticated', 'anon'] LOOP
+--     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = r) THEN
+--       EXECUTE format('DROP OWNED BY %I CASCADE', r);
+--       EXECUTE format('DROP ROLE %I', r);
+--     END IF;
+--   END LOOP;
+-- END $$;

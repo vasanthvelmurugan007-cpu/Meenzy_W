@@ -74,6 +74,91 @@ function ForwardModal({ waNumber, message, onClose }) {
   );
 }
 
+function SendTemplateModal({ waNumber, contactNumber, contactName, onClose }) {
+  const [templates, setTemplates] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
+  const [sending, setSending] = useState(false);
+  const [result, setResult] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    api.templates.list({ status: 'APPROVED' })
+      .then(res => {
+        if (!alive) return;
+        const list = Array.isArray(res) ? res : (res.templates || []);
+        // Just in case the backend didn't filter strictly
+        setTemplates(list.filter(t => t.status === 'APPROVED' || t.status === 'Approved'));
+      })
+      .catch(() => {})
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, []);
+
+  const send = async () => {
+    if (!selectedTemplateId) return;
+    setSending(true); setResult(null);
+    try {
+      const payload = {
+        from_number: waNumber,
+        recipient_numbers: [{ contact_number: contactNumber, name: contactName || contactNumber }],
+        status: 'SENT',
+        message_type: 'template',
+        template_id: selectedTemplateId,
+        variable_mapping: {}, // Basic support for now
+      };
+      const broadcast = await api.broadcasts.create(payload);
+      await api.broadcasts.send(broadcast.id);
+      setResult({ ok: true, msg: 'Template sent! The 24-hour window will reopen shortly.' });
+      setTimeout(onClose, 1500);
+    } catch (e) {
+      setResult({ ok: false, msg: e.message || 'Failed to send template.' });
+      setSending(false);
+    }
+  };
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)', zIndex: 330, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: 'var(--c-cardBg)', borderRadius: 14, boxShadow: C.shadowLg, width: 'min(420px,100%)', maxHeight: '80vh', display: 'flex', flexDirection: 'column', fontFamily: FONT, overflow: 'hidden' }}>
+        <div style={{ padding: '14px 16px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ fontWeight: 700, fontSize: 15, color: C.text }}>Send Approved Template</div>
+          <button onClick={onClose} style={{ border: 'none', background: C.pageBg, borderRadius: 8, width: 28, height: 28, cursor: 'pointer', color: C.textSecondary }}><X size={15} /></button>
+        </div>
+        <div style={{ padding: '16px' }}>
+          {loading ? (
+            <div style={{ fontSize: 13, color: C.textMuted }}>Loading templates…</div>
+          ) : templates.length === 0 ? (
+            <div style={{ fontSize: 13, color: C.textMuted }}>No approved templates found. Create one in Template Builder.</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <select
+                value={selectedTemplateId}
+                onChange={e => setSelectedTemplateId(e.target.value)}
+                style={{ width: '100%', border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 10px', fontSize: 13, fontFamily: FONT, outline: 'none', background: C.cardBg, color: C.text }}
+              >
+                <option value="">Select a template…</option>
+                {templates.map(t => (
+                  <option key={t.id} value={t.id}>{t.name} ({t.language})</option>
+                ))}
+              </select>
+              <div style={{ fontSize: 12, color: C.textMuted }}>
+                Note: Templates with variables are currently sent with blank values in this quick-sender. For complex templates, use Bulk Message.
+              </div>
+            </div>
+          )}
+        </div>
+        {result && <div style={{ margin: '0 16px 16px', fontSize: 12.5, color: result.ok ? C.green : '#A32D2D', background: result.ok ? '#E3F2EC' : C.primaryLight, borderRadius: 8, padding: '8px 10px' }}>{result.msg}</div>}
+        <div style={{ padding: '12px 16px', borderTop: `1px solid ${C.border}`, background: C.pageBg, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <button onClick={onClose} style={{ padding: '8px 16px', borderRadius: 8, border: `1px solid ${C.border}`, background: C.cardBg, color: C.text, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}>Cancel</button>
+          <button onClick={send} disabled={sending || !selectedTemplateId} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: sending || !selectedTemplateId ? '#ccc' : C.primary, color: '#fff', fontSize: 13, fontWeight: 600, cursor: sending || !selectedTemplateId ? 'not-allowed' : 'pointer', fontFamily: FONT }}>
+            {sending ? 'Sending…' : 'Send'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) {
   const [page, setPage] = useState(1);
   const [limit] = useState(50);
@@ -123,6 +208,7 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
   const [optimisticMessages, setOptimisticMessages] = useState([]);
   const [businessAvatarUrl, setBusinessAvatarUrl] = useState(null);
   const [forwardMsg, setForwardMsg] = useState(null); // message being forwarded (opens picker)
+  const [showTemplateModal, setShowTemplateModal] = useState(false); // opens template picker
   const [replyTo, setReplyTo] = useState(null); // message being quote-replied to
   const [myReactions, setMyReactions] = useState({}); // messageId -> emoji ('' = removed), optimistic
   const [starOverrides, setStarOverrides] = useState({}); // messageId -> bool, optimistic
@@ -1063,22 +1149,34 @@ export default function ChatWindow({ waNumber, contactNumber, onContactSaved }) 
         <ForwardModal waNumber={waNumber} message={forwardMsg} onClose={() => setForwardMsg(null)} />
       )}
 
+      {/* Template picker */}
+      {showTemplateModal && (
+        <SendTemplateModal waNumber={waNumber} contactNumber={contactNumber} contactName={contactName} onClose={() => setShowTemplateModal(false)} />
+      )}
+
       {/* Reply composer */}
       <div style={{ borderTop: `1px solid ${C.borderDark}`, background: 'var(--c-chatPanel)', flexShrink: 0 }}>
         {windowStatus && !windowStatus.canSendFreeForm && (
-          <div style={{ padding: '8px 16px', background: '#FFF3E0', borderBottom: `1px solid #FFB74D`, fontSize: 12, color: '#E65100', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Lock size={13} />
-            <span>
-              {windowStatus.reason ? (
-                // Couldn't resolve a sending account (e.g. this WhatsApp number
-                // isn't registered, is inactive, or has no token) — NOT a 24h timeout.
-                <>{windowStatus.reason}. Add or activate this number in Settings → WhatsApp Accounts to send.</>
-              ) : windowStatus.lastIncomingSecondsAgo == null ? (
-                <>No inbound message from this contact yet. Start the conversation with an approved template via Bulk Message.</>
-              ) : (
-                <>Outside the 24-hour reply window (last inbound {Math.floor(windowStatus.lastIncomingSecondsAgo / 3600)}h ago). Send an approved template via Bulk Message instead.</>
-              )}
-            </span>
+          <div style={{ padding: '8px 16px', background: '#FFF3E0', borderBottom: `1px solid #FFB74D`, fontSize: 12, color: '#E65100', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
+              <Lock size={13} />
+              <span>
+                {windowStatus.reason ? (
+                  // Couldn't resolve a sending account (e.g. this WhatsApp number
+                  // isn't registered, is inactive, or has no token) — NOT a 24h timeout.
+                  <>{windowStatus.reason}. Add or activate this number in Settings → WhatsApp Accounts to send.</>
+                ) : windowStatus.lastIncomingSecondsAgo == null ? (
+                  <>No inbound message from this contact yet. Start the conversation with an approved template.</>
+                ) : (
+                  <>Outside the 24-hour reply window (last inbound {Math.floor(windowStatus.lastIncomingSecondsAgo / 3600)}h ago). Send an approved template instead.</>
+                )}
+              </span>
+            </div>
+            {!windowStatus.reason && (
+              <button onClick={() => setShowTemplateModal(true)} style={{ padding: '4px 10px', background: '#E65100', color: '#fff', border: 'none', borderRadius: 4, fontSize: 11, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                Send Template
+              </button>
+            )}
           </div>
         )}
         {sendError && (
